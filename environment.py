@@ -1,11 +1,12 @@
 import random
-
+import os
 import Task
 import Vehicle as VE  # 确保 Vehicle.py 定义了 Vec 类
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import json
 import pandas as pd
+import EdgeServer as eds
 
 x_axis = 1000  # 网络长 单位米
 y_axis = 1000  # 网络宽
@@ -16,20 +17,96 @@ subtasks_dag = 5      #每个任务的子任务数量
 
 
 class Env:
-    def __init__(self, edge_num, vehicle_num, load_from_file=False, file_name="vehicle_positions.json"):
+    def __init__(self, edge_num, vehicle_num, load_from_file=False, vehicle_file_name="vehicle_positions.json", edge_file_name = 'edge_positions.json'):
         self.edge_num = edge_num
         self.vehicle_num = vehicle_num
-        self.file_name = file_name
+        self.vehicle_file_name = vehicle_file_name
+        self.edge_file_name = edge_file_name
         self.grid_points, self.horizontal_lines, self.vertical_lines = self.generate_grid()
+        self.dt_edge_dic = self.init_dt_edge_dic()
 
         if load_from_file:
             self.vehicles = self.load_vehicle_positions()
+            self.edges = self.load_edge_positions()
         else:
             self.vehicles = self.init_vehicles()
-            self.save_vehicle_positions()  # 保存初始位置到文件
+            self.edges = self.init_edges()
+
 
         self.tasks = self.generate_task_from_region()
 
+
+    ##########初始化Edge Server 放置DT的信息#####################
+    def init_dt_edge_dic(self):
+        dt_edge_dic = dict()
+        for i in range(self.edge_num):
+            dt_edge_dic[str(i)] = ""
+        print(dt_edge_dic)
+        return dt_edge_dic
+
+    ##########初始化Edge Server################################
+    def init_edges(self):
+        edges = []
+        step_x = x_axis / grid_size
+        step_y = y_axis / grid_size
+
+        points_per_row = int((grid_size + 1) ** 2 / self.edge_num)
+        count = 0
+        for i in range(grid_size + 1):
+            for j in range(grid_size + 1):
+                if count >= self.edge_num:
+                    break
+                if (i * grid_size + j) % points_per_row == 0:
+                    location = (i * step_x, j * step_y)
+                    edge_server = eds.Edge(edge_id=count, location=location)
+                    edges.append(edge_server)
+                    count += 1
+
+        self.save_edge_positions(edges)
+        return edges
+
+    def save_edge_positions(self, edges):
+        """
+        保存边缘服务器位置到文件
+        """
+        edge_data = [
+            {
+                "edge_id": edge.edge_id,
+                "location": edge.location
+            }
+            for edge in edges
+        ]
+        with open(self.edge_file_name, "w") as f:
+            json.dump(edge_data, f, indent=4)
+        print(f"Saved initial edge server positions to {self.edge_file_name}")
+
+    def load_edge_positions(self):
+        """
+        从文件加载边缘服务器位置
+        """
+        if not os.path.exists(self.edge_file_name):
+            edges = self.init_edges()
+        else:
+            with open(self.edge_file_name, "r") as f:
+                edge_data = json.load(f)
+
+            edges = [
+                eds.Edge(
+                    edge_id=data["edge_id"],
+                    location=tuple(data["location"])
+                )
+                for data in edge_data
+            ]
+            print(f"Loaded edge server positions from {self.edge_file_name}")
+        return edges
+
+    def file_exists(self, file_name):
+        """
+        检查边缘服务器文件是否存在
+        """
+        return os.path.exists(self.edge_file_name)
+
+    ##########初始化Vehicles################################
     def save_vehicle_positions(self):
         """
         将车辆的初始位置保存到文件
@@ -43,15 +120,15 @@ class Env:
             }
             for vehicle in self.vehicles
         ]
-        with open(self.file_name, "w") as f:
+        with open(self.vehicle_file_name, "w") as f:
             json.dump(vehicle_data, f, indent=4)
-        print(f"Saved initial vehicle positions to {self.file_name}")
+        print(f"Saved initial vehicle positions to {self.vehicle_file_name}")
 
     def load_vehicle_positions(self):
         """
         从文件加载车辆位置
         """
-        with open(self.file_name, "r") as f:
+        with open(self.vehicle_file_name, "r") as f:
             vehicle_data = json.load(f)
 
         vehicles = [
@@ -63,9 +140,32 @@ class Env:
             )
             for data in vehicle_data
         ]
-        print(f"Loaded vehicle positions from {self.file_name}")
+        print(f"Loaded vehicle positions from {self.vehicle_file_name}")
         return vehicles
 
+    def init_vehicles(self):
+        """
+        初始化车辆位置，车辆随机选择在线上的一个点，并分配速度和方向
+        """
+        vehicles = []
+        for i in range(self.vehicle_num):
+            if random.random() < 0.5:  # 随机选择一条水平线
+                start_location = random.choice(self.horizontal_lines)
+                direction = random.choice(["left", "right"])
+            else:  # 随机选择一条垂直线
+                start_location = random.choice(self.vertical_lines)
+                direction = random.choice(["up", "down"])
+
+            velocity = random.uniform(10, 50)  # 随机分配速度
+            vehicles.append(VE.Vec(vec_id=i, location=start_location, velocity=velocity, direction=direction))
+
+            # 调试打印车辆初始化信息
+            #print(f"Initialized Vehicle {i}: Location={start_location}, Velocity={velocity}, Direction={direction}")
+        self.save_vehicle_positions()  # 保存初始位置到文件
+
+        return vehicles
+
+    ##########对网络分区便于产生任务################################
     def divide_into_regions(self):
         """
         将网格划分为四个区域，并返回每个区域包含的车辆集合
@@ -100,49 +200,6 @@ class Env:
                 new_task = Task.Task(task_id=int(region), n_subtasks=subtasks_dag, vehicles= vehicles)
                 tasks.append(new_task)
         return tasks
-    def display_vehicles(self):
-        """
-        打印所有车辆的位置、速度和方向，格式化输出
-        """
-        vehicle_data = [
-            {
-                "Vehicle ID": vehicle.vec_id,
-                "Location": vehicle.location,
-                "Velocity": vehicle.velocity,
-                "Direction": vehicle.direction,
-            }
-            for vehicle in self.vehicles
-        ]
-        df = pd.DataFrame(vehicle_data)
-        print(df)
-
-    def plot_vehicle_positions(self):
-        """
-        绘制所有车辆的位置，并用编号标注
-        """
-        plt.figure(figsize=(8, 8))
-        plt.title("Vehicle Positions")
-
-        # 绘制网格
-        for i in range(grid_size + 1):
-            # 水平线
-            plt.plot([0, x_axis], [i * y_axis / grid_size, i * y_axis / grid_size], 'gray', linewidth=0.5)
-            # 垂直线
-            plt.plot([i * x_axis / grid_size, i * x_axis / grid_size], [0, y_axis], 'gray', linewidth=0.5)
-
-        # 绘制车辆
-        for vehicle in self.vehicles:
-            x, y = vehicle.location
-            plt.scatter(x, y, color='blue', s=50)  # 蓝色点表示车辆
-            # 在点旁标注编号，偏移一点位置避免重叠
-            plt.text(x + 10, y + 10, str(vehicle.vec_id), fontsize=9, color='black', ha='center', va='center')
-
-        plt.xlim(0, x_axis)
-        plt.ylim(0, y_axis)
-        plt.xlabel("X Axis (m)")
-        plt.ylabel("Y Axis (m)")
-        plt.grid(True)
-        plt.show()
 
     def generate_grid(self):
         """
@@ -169,36 +226,7 @@ class Env:
 
         return grid_points, horizontal_lines, vertical_lines
 
-    def init_vehicles(self):
-        """
-        初始化车辆位置，车辆随机选择在线上的一个点，并分配速度和方向
-        """
-        vehicles = []
-        for i in range(self.vehicle_num):
-            if random.random() < 0.5:  # 随机选择一条水平线
-                start_location = random.choice(self.horizontal_lines)
-                direction = random.choice(["left", "right"])
-            else:  # 随机选择一条垂直线
-                start_location = random.choice(self.vertical_lines)
-                direction = random.choice(["up", "down"])
-
-            velocity = random.uniform(10, 50)  # 随机分配速度
-            vehicles.append(VE.Vec(vec_id=i, location=start_location, velocity=velocity, direction=direction))
-
-            # 调试打印车辆初始化信息
-            print(f"Initialized Vehicle {i}: Location={start_location}, Velocity={velocity}, Direction={direction}")
-
-        return vehicles
-
-    def move_vehicles(self):
-        """
-        让所有车辆移动一个时隙
-        """
-        for vehicle in self.vehicles:
-            vehicle.move(self.grid_points, self.horizontal_lines, self.vertical_lines, time_slot, x_axis, y_axis,grid_size)
-            # 调试打印车辆位置
-            print(f"Vehicle {vehicle.vec_id}: New Position {vehicle.location}")
-
+    ##########画图################################
     def animate(self, frames=100, interval=100):
         """
         使用动画展示车辆在网格中的移动
@@ -236,6 +264,58 @@ class Env:
         # 保存动画为 GIF
         ani.save("vehicle_animation.gif", writer="pillow", dpi=80, savefig_kwargs={"facecolor": "white"})
         plt.show()
+    #def store_DT_to_edge(self, vehicle_id, edge_id):
+
+    def display_network(self):
+        """
+        绘制整个网络，显示车辆和边缘服务器的位置，并用编号标注
+        """
+        plt.figure(figsize=(8, 8))
+        plt.title("Network: Vehicles and Edge Servers")
+
+        # 绘制网格
+        for i in range(grid_size + 1):
+            # 水平线
+            plt.plot([0, x_axis], [i * y_axis / grid_size, i * y_axis / grid_size], 'gray', linewidth=0.5)
+            # 垂直线
+            plt.plot([i * x_axis / grid_size, i * x_axis / grid_size], [0, y_axis], 'gray', linewidth=0.5)
+
+        # 绘制边缘服务器
+        for edge in self.edges:
+            x, y = edge.location
+            plt.scatter(x, y, color='red', s=100,
+                        label='Edge Server' if 'Edge Server' not in plt.gca().get_legend_handles_labels()[1] else "")
+            plt.text(x + 10, y + 10, f"Edge {edge.edge_id}", fontsize=9, color='black', ha='center', va='center')
+
+        # 绘制车辆
+        for vehicle in self.vehicles:
+            x, y = vehicle.location
+            plt.scatter(x, y, color='blue', s=50,
+                        label='Vehicle' if 'Vehicle' not in plt.gca().get_legend_handles_labels()[1] else "")
+            # 在点旁标注编号，偏移一点位置避免重叠
+            plt.text(x + 10, y + 10, str(vehicle.vec_id), fontsize=9, color='black', ha='center', va='center')
+
+        # 图例
+        plt.legend(loc='upper right')
+
+        # 设置坐标范围和标签
+        plt.xlim(0, x_axis)
+        plt.ylim(0, y_axis)
+        plt.xlabel("X Axis (m)")
+        plt.ylabel("Y Axis (m)")
+        plt.grid(True)
+        plt.show()
+
+    ##########车辆移动控制################################
+    def move_vehicles(self):
+        """
+        让所有车辆移动一个时隙
+        """
+        for vehicle in self.vehicles:
+            vehicle.move(self.grid_points, self.horizontal_lines, self.vertical_lines, time_slot, x_axis, y_axis,grid_size)
+            # 调试打印车辆位置
+            print(f"Vehicle {vehicle.vec_id}: New Position {vehicle.location}")
+
 
 
 if __name__ == "__main__":
@@ -247,12 +327,9 @@ if __name__ == "__main__":
 
     #env = Env(edge_num=edge_num, vehicle_num=vehicle_num)
     env = Env(edge_num=edge_num, vehicle_num=vehicle_num, load_from_file=load_from_file)
-    env.display_vehicles()
-    env.plot_vehicle_positions()
+    env.display_network()
 
     for task in env.tasks:
         task.plot_dependency_graph()
 
 
-    # 动画展示车辆在网格中的移动
-    #env.animate(frames=100, interval=100)
