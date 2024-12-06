@@ -364,6 +364,7 @@ class Env:
 
     ########## 本地计算 ##########
     def local_computing(self):
+
         current_subtasks = [subtask for task in self.tasks for subtask in task.get_ready_subtasks()]
         for edge in self.edges:
             dic = self.dt_edge_dic[str(edge.edge_id)]
@@ -380,6 +381,7 @@ class Env:
                         subtask.compute_data(computed_size)
         for task in self.tasks:
             task.update_task_status()
+        self.move_vehicles()
 
     ########## 可视化本地计算 ##########
     def visualize_local_computing(self, time_slots):
