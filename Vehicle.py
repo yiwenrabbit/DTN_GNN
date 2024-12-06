@@ -63,4 +63,4 @@ class Vec:
             self.location = new_location
 
         # 调试打印更新的位置
-        print(f"Vehicle {self.vec_id} moved to {self.location} with direction {self.direction}")
+        #print(f"Vehicle {self.vec_id} moved to {self.location} with direction {self.direction}")

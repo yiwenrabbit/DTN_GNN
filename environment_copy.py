@@ -1,12 +1,13 @@
 import random
 import os
 import Task
-import Vehicle as VE
+import Vehicle as VE  # 确保 Vehicle.py 定义了 Vec 类
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import json
-import numpy as np
+import pandas as pd
 import EdgeServer as eds
+import numpy as np
 
 x_axis = 1000  # 网络长 单位米
 y_axis = 1000  # 网络宽
@@ -14,7 +15,6 @@ grid_size = 10  # 网格划分数量（每行/列的格子数）
 time_slot = 0.1  # 时隙长度为0.1秒
 vechiles_for_task = 4 #判断区域中车辆数量是否超过该变量，如果是则生成任务
 subtasks_dag = 5      #每个任务的子任务数量
-
 
 
 class Env:
@@ -33,14 +33,6 @@ class Env:
             self.vehicles = self.init_vehicles()
             self.edges = self.init_edges()
         self.tasks = self.generate_task_from_region()
-        self.all_subtasks = self.get_all_subtasks()
-
-    def get_all_subtasks(self):
-        sub_tasks = []
-        for task in self.tasks:
-            for sub_task in task.subtasks:
-                sub_tasks.append(sub_task)
-        return sub_tasks
 
 
 
@@ -362,31 +354,54 @@ class Env:
         # 如果没有找到，返回 None 或抛出异常
         return None
 
-    ########## 本地计算 ##########
+    ###########任务全本地处理方案(无传输时延)############################
     def local_computing(self):
-        current_subtasks = [subtask for task in self.tasks for subtask in task.get_ready_subtasks()]
+        """
+        统计每个边缘服务器上当前分配的任务数
+        """
+        # 获取当前所有就绪的子任务
+        current_subtasks = []
+        for task in self.tasks:
+            current_subtasks.extend(task.get_ready_subtasks())  # 收集所有任务的就绪子任务
+
         for edge in self.edges:
-            dic = self.dt_edge_dic[str(edge.edge_id)]
-            if len(dic)!=0:
-                edge_tasks = [
-                    subtask for subtask in current_subtasks
-                    if subtask.vehicle_id in self.dt_edge_dic[str(edge.edge_id)]
-                ]
-                if edge_tasks:
+            sub_task_on_edge = self.dt_edge_dic[str(edge.edge_id)]
+            if len(sub_task_on_edge)!=0:
+                edge_tasks = []
+                for current_sub_task in current_subtasks:
+                    if current_sub_task.subtask_id in sub_task_on_edge:
+                        edge_tasks.append(current_sub_task)
+                if len(edge_tasks) !=0:
                     computing_power = edge.CPU / len(edge_tasks)
                     computed_size = computing_power * time_slot / 1e7
-                    for subtask in edge_tasks:
-                        subtask.trans_size = 0
-                        subtask.compute_data(computed_size)
+
+                    for sub_task in edge_tasks:
+                        sub_task.trans_size = 0
+                        sub_task.compute_data(computed_size)
+
         for task in self.tasks:
             task.update_task_status()
 
-    ########## 可视化本地计算 ##########
+        self.move_vehicles()
+
+
+    def step(self):
+        ######车辆位置更新###########
+        self.move_vehicles()
+
+        ######任务更新##############
+
+    #################可视化local_computing###########
     def visualize_local_computing(self, time_slots):
+        """
+        可视化本地计算过程，展示子任务在边缘服务器上的分布以及完成进度
+        :param time_slots: 时隙数量
+        """
         fig, ax = plt.subplots(figsize=(10, 10))
 
         def init():
             ax.clear()
+            # 绘制网格
             for i in range(grid_size + 1):
                 ax.plot([0, x_axis], [i * y_axis / grid_size, i * y_axis / grid_size], 'gray', linewidth=0.5)
                 ax.plot([i * x_axis / grid_size, i * x_axis / grid_size], [0, y_axis], 'gray', linewidth=0.5)
@@ -397,46 +412,77 @@ class Env:
             ax.clear()
             init()
 
-            # 每帧更新
+            # 模拟每个时隙的计算
             self.local_computing()
 
-            # 绘制边缘服务器和子任务进度
+            # 绘制边缘服务器
             for edge in self.edges:
                 x, y = edge.location
-                ax.scatter(x, y, color='red', s=100)
+                ax.scatter(x, y, color='red', s=100,
+                           label='Edge Server' if 'Edge Server' not in ax.get_legend_handles_labels()[1] else "")
                 ax.text(x + 10, y + 10, f"Edge {edge.edge_id}", fontsize=9, color='black', ha='center', va='center')
 
-                # 子任务完成进度
-                if len(self.dt_edge_dic[str(edge.edge_id)])!=0:
-                    valid_subtasks = [subtask for subtask in self.all_subtasks
-                                      if subtask.vehicle_id in self.dt_edge_dic[str(edge.edge_id)]]
-                    progress_text = [
-                        f"S{subtask.subtask_id}: {100 - (subtask.compute_size / subtask.data_size * 100 if subtask.data_size != 0 else 100):.1f}%"
-                        for subtask in valid_subtasks
-                    ]
-                    if progress_text:
-                        ax.text(x, y - 20, "\n".join(progress_text), fontsize=8, color='blue', ha='center', va='center')
+                # 仅显示当前边缘服务器上有效的子任务，并标注完成进度
+                valid_subtasks = [subtask_id for subtask_id in self.dt_edge_dic[str(edge.edge_id)] if
+                                  self.get_subtask(subtask_id) is not None]
+                progress_text = []
+                for subtask_id in valid_subtasks:
+                    subtask = self.get_subtask(subtask_id)
+                    completion = (1 - subtask.compute_size / subtask.data_size) * 100 if subtask.data_size > 0 else 100
+                    progress_text.append(f"S{subtask_id}: {completion:.1f}%")
+                if progress_text:
+                    ax.text(x, y - 20, "\n".join(progress_text), fontsize=8, color='blue', ha='center', va='center')
+
             # 绘制车辆
             for vehicle in self.vehicles:
                 x, y = vehicle.location
-                ax.scatter(x, y, color='blue', s=50)
+                ax.scatter(x, y, color='blue', s=50,
+                           label='Vehicle' if 'Vehicle' not in ax.get_legend_handles_labels()[1] else "")
                 ax.text(x + 10, y + 10, f"V{vehicle.vec_id}", fontsize=9, color='black', ha='center', va='center')
 
+            ax.legend(loc='upper right')
             ax.set_title(f"Local Computing Visualization - Time Slot {frame + 1}")
 
         ani = FuncAnimation(fig, update, init_func=init, frames=time_slots, interval=500, repeat=False)
         ani.save("local_computing_with_progress.gif", writer="pillow", dpi=80, savefig_kwargs={"facecolor": "white"})
         plt.show()
 
-    def get_subtask(self, subtask_id):
-        for task in self.tasks:
-            for sub_task in task.subtasks:
-                if sub_task.subtask_id == subtask_id:
-                    return sub_task
-        return None
 
 
 if __name__ == "__main__":
-    env = Env(edge_num=16, vehicle_num=20, load_from_file=True)
+    edge_num = 16       # 假设有16个边缘节点
+    vehicle_num = 20    # 假设有20辆车
+    N_time_slots = 100  # 10 second
+
+    # 加载已有车辆位置
+    load_from_file = True  # 设置为 False 以重新生成车辆并保存
+
+    #env = Env(edge_num=edge_num, vehicle_num=vehicle_num)
+    env = Env(edge_num=edge_num, vehicle_num=vehicle_num, load_from_file=load_from_file)
+    env.display_network()
     env.assign_dts_to_nearest_edges()
-    env.visualize_local_computing(80)
+    print(env.dt_edge_dic)
+    for i in range(N_time_slots):
+        env.local_computing()
+        if i==80:
+            print("hi")
+
+# if __name__ == "__main__":
+#     edge_num = 16       # 假设有16个边缘节点
+#     vehicle_num = 20    # 假设有20辆车
+#     N_time_slots = 100  # 10 seconds
+#
+#     load_from_file = True
+#     env = Env(edge_num=edge_num, vehicle_num=vehicle_num, load_from_file=load_from_file)
+#     env.assign_dts_to_nearest_edges()
+#     for task in env.tasks:
+#         task.plot_dependency_graph()
+#     print(env.dt_edge_dic)
+#     # 可视化本地计算过程
+#     env.visualize_local_computing(N_time_slots)
+
+
+
+
+
+
