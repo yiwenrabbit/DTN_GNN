@@ -16,6 +16,7 @@ class SubTask:
         self.cpu_cycles = cpu_cycles if cpu_cycles else self.data_size * 1e7  # 假设每 Mb 数据需要 1e7 个 CPU 周期
         self.trans_size = self.data_size  # 如果需要传输，传输数据不为 0
         self.compute_size = self.data_size  # 如果需要处理数据，初始值为数据大小
+        self.offloading_target = [0,1]      # 第一位：0代表是在edge server上算，1代表在车上算  第二位：0
 
     def transmit_data(self, amount):
         """

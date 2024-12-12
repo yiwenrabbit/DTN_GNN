@@ -7,6 +7,7 @@ from matplotlib.animation import FuncAnimation
 import json
 import numpy as np
 import EdgeServer as eds
+import Comm
 
 x_axis = 1000  # 网络长 单位米
 y_axis = 1000  # 网络宽
@@ -42,8 +43,6 @@ class Env:
                 sub_tasks.append(sub_task)
         return sub_tasks
 
-
-
     ##########初始化Edge Server 放置DT的信息#####################
     def init_dt_edge_dic(self):
         dt_edge_dic = dict()
@@ -51,6 +50,18 @@ class Env:
             dt_edge_dic[str(i)] = ""
         #print(dt_edge_dic)
         return dt_edge_dic
+
+    #对DT的放置位置进行修改
+    def change_dt_edge(self, edge_id, vec_id):
+        if vec_id in self.dt_edge_dic[edge_id]:
+            print('DT already on this edge,'+'edge_id:'+edge_id+'vec_id:'+vec_id)
+        else:
+            for key, value in self.dt_edge_dic.items():
+                if isinstance(value, list) or isinstance(value, set):
+                    # 如果值是列表或集合，移除指定值
+                    if vec_id in value:
+                        value.remove(vec_id)
+            self.dt_edge_dic[edge_id].append(vec_id)
 
     ##########初始化Edge Server################################
     def init_edges(self):
@@ -437,8 +448,24 @@ class Env:
                     return sub_task
         return None
 
+    ###########现在需要进行决策###############
+    def offloading_decisions(self):
+        current_ready_tasks = []
+        for task in self.tasks:
+            current_ready_tasks.append(task.get_ready_subtasks())
+
+        #决策需包含传输功率与目标
+        return current_ready_tasks
+
+
+
+
+
 
 if __name__ == "__main__":
     env = Env(edge_num=16, vehicle_num=20, load_from_file=True)
     env.assign_dts_to_nearest_edges()
-    env.visualize_local_computing(80)
+    ready_tasks = env.offloading_decisions()
+
+
+    #env.visualize_local_computing(80)
