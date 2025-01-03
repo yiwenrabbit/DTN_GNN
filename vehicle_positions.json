@@ -2,181 +2,181 @@
     {
         "vec_id": 0,
         "location": [
-            900.0,
-            1000.0
+            700.0,
+            300.0
         ],
-        "velocity": 29.736243621427292,
-        "direction": "right"
+        "velocity": 31.93937983001034,
+        "direction": "up"
     },
     {
         "vec_id": 1,
         "location": [
-            300.0,
+            1000.0,
             900.0
         ],
-        "velocity": 18.112211356758134,
-        "direction": "left"
+        "velocity": 24.499082308270292,
+        "direction": "down"
     },
     {
         "vec_id": 2,
         "location": [
             800.0,
-            600.0
+            800.0
         ],
-        "velocity": 48.827034563626796,
+        "velocity": 48.41347141159708,
         "direction": "up"
     },
     {
         "vec_id": 3,
         "location": [
-            300.0,
-            900.0
+            0.0,
+            600.0
         ],
-        "velocity": 46.27733424615271,
-        "direction": "down"
+        "velocity": 45.26424623436155,
+        "direction": "right"
     },
     {
         "vec_id": 4,
         "location": [
-            800.0,
-            800.0
+            500.0,
+            100.0
         ],
-        "velocity": 34.731247970381574,
-        "direction": "right"
+        "velocity": 29.807060203712766,
+        "direction": "left"
     },
     {
         "vec_id": 5,
         "location": [
-            700.0,
-            600.0
+            800.0,
+            800.0
         ],
-        "velocity": 24.6548319668939,
-        "direction": "left"
+        "velocity": 29.06778377702127,
+        "direction": "right"
     },
     {
         "vec_id": 6,
         "location": [
-            1000.0,
-            300.0
+            500.0,
+            700.0
         ],
-        "velocity": 32.88743004430266,
-        "direction": "down"
+        "velocity": 44.153816620762726,
+        "direction": "up"
     },
     {
         "vec_id": 7,
         "location": [
-            300.0,
-            800.0
+            700.0,
+            500.0
         ],
-        "velocity": 11.818097977195684,
-        "direction": "down"
+        "velocity": 12.286148137391958,
+        "direction": "right"
     },
     {
         "vec_id": 8,
         "location": [
-            1000.0,
-            100.0
+            500.0,
+            600.0
         ],
-        "velocity": 19.72010261009455,
+        "velocity": 15.972010652503892,
         "direction": "up"
     },
     {
         "vec_id": 9,
         "location": [
             500.0,
-            200.0
+            500.0
         ],
-        "velocity": 32.86865355959629,
-        "direction": "down"
+        "velocity": 12.609651234386385,
+        "direction": "up"
     },
     {
         "vec_id": 10,
         "location": [
             300.0,
-            200.0
+            1000.0
         ],
-        "velocity": 25.877234526479874,
+        "velocity": 22.007818965519448,
         "direction": "right"
     },
     {
         "vec_id": 11,
         "location": [
-            200.0,
-            100.0
+            900.0,
+            800.0
         ],
-        "velocity": 38.96380910199419,
-        "direction": "down"
+        "velocity": 17.894849483840037,
+        "direction": "up"
     },
     {
         "vec_id": 12,
         "location": [
-            100.0,
-            100.0
+            0.0,
+            600.0
         ],
-        "velocity": 48.596156514544525,
+        "velocity": 13.105247916819689,
         "direction": "right"
     },
     {
         "vec_id": 13,
         "location": [
-            100.0,
-            400.0
+            200.0,
+            500.0
         ],
-        "velocity": 39.06411499367262,
+        "velocity": 30.077912907407054,
         "direction": "left"
     },
     {
         "vec_id": 14,
         "location": [
-            400.0,
-            600.0
+            1000.0,
+            0.0
         ],
-        "velocity": 13.718316081400058,
+        "velocity": 25.596696442924554,
         "direction": "up"
     },
     {
         "vec_id": 15,
         "location": [
-            600.0,
-            0.0
+            500.0,
+            600.0
         ],
-        "velocity": 44.64042827494265,
-        "direction": "left"
+        "velocity": 11.833079128029706,
+        "direction": "down"
     },
     {
         "vec_id": 16,
         "location": [
-            800.0,
-            300.0
+            1000.0,
+            900.0
         ],
-        "velocity": 28.184736849736073,
-        "direction": "left"
+        "velocity": 36.99674795717603,
+        "direction": "down"
     },
     {
         "vec_id": 17,
         "location": [
-            400.0,
-            500.0
+            600.0,
+            900.0
         ],
-        "velocity": 49.27667799379533,
-        "direction": "up"
+        "velocity": 43.17085253956794,
+        "direction": "right"
     },
     {
         "vec_id": 18,
         "location": [
-            100.0,
-            500.0
+            400.0,
+            700.0
         ],
-        "velocity": 41.55097465609913,
-        "direction": "left"
+        "velocity": 25.64206086702679,
+        "direction": "up"
     },
     {
         "vec_id": 19,
         "location": [
-            700.0,
-            700.0
+            300.0,
+            600.0
         ],
-        "velocity": 10.542332253624508,
-        "direction": "up"
+        "velocity": 29.698677188903343,
+        "direction": "down"
     }
 ]
