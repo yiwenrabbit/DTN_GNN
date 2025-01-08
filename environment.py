@@ -17,7 +17,7 @@ import pickle
 x_axis = 1000  # 网络长 单位米
 y_axis = 1000  # 网络宽
 grid_size = 10  # 网格划分数量（每行/列的格子数）
-time_slot = 0.1  # 时隙长度为0.1秒
+time_slot = 0.5  # 时隙长度为0.1秒
 vechiles_for_task = 4 #判断区域中车辆数量是否超过该变量，如果是则生成任务
 subtasks_dag = 5      #每个任务的子任务数量
 max_data_size = Task.max_data_size      #子任务的大小定义在Task.py中
@@ -27,10 +27,61 @@ max_edge_to_v_distance = 250            #大于这个距离为1
 min_edge_to_v_distance = 30             #小于这个距离为0
 dt_computing_power = 0.3e9              #DT在edge上会占据DT的算力
 edge_max_cpu  = EdgeServer.edge_max_cpu #edge的初始算力
+com_density = Task.com_density          #计算密度
+
+tran_power = Comm.power                         #27dbm 传输功率
 
 min_delay = Task.min_delay              #任务最小时延
 max_delay = Task.max_delay               #任务最大时延
 
+min_accuracy = 0.8                      #DT上传的数据百分比最小值
+max_accuracy = 1
+
+computing_probability = 0.8             #车辆是算力车辆的可能性
+edge_cpu_for_task = 0.5e9               #edge分配给每个任务的计算量
+
+
+
+
+
+
+def ordering_subtasks_or_cpu(size, subtasks):    #对于算力的排序第一个是处理数据量，第二个是id
+    # 使用 zip 打包两个列表
+    paired = list(zip(size, subtasks))
+
+    # 按第一个列表的值排序，同时保持顺序稳定性
+    sorted_paired = sorted(paired, key=lambda x: (-x[0], subtasks.index(x[1])))
+
+    # 解压排序后的列表
+    sorted_size, sorted_subtasks = zip(*sorted_paired)
+
+    return sorted_size,sorted_subtasks
+
+
+def calculate_process_data(vec_loc, edge_loc, vec_cpu):
+    tran_rate = Comm.trans_rate(edge_loc, vec_loc, tran_power)
+    time = (time_slot * vec_cpu) /(tran_rate*com_density + vec_cpu)
+    processed_data_size = time * tran_rate
+    return processed_data_size
+
+
+
+
+
+#计算真实距离
+def calculate_real_distance(vec_loc, edge_loc):
+    vec_x, vec_y = vec_loc
+    edge_x, edge_y = edge_loc
+    # 计算欧几里得距离
+    distance = np.sqrt((vec_x - edge_x) ** 2 + (vec_y - edge_y) ** 2)
+
+    if distance <= min_edge_to_v_distance:
+        return min_edge_to_v_distance
+    else:
+        if distance <= max_edge_to_v_distance:
+            return distance
+        else:
+            return -1
 
 class Env:
     def __init__(self, edge_num, vehicle_num, load_from_file=False, vehicle_file_name="vehicle_positions.json", edge_file_name = 'edge_positions.json'):
@@ -39,7 +90,6 @@ class Env:
         self.vehicle_file_name = vehicle_file_name
         self.edge_file_name = edge_file_name
         self.grid_points, self.horizontal_lines, self.vertical_lines = self.generate_grid()
-        self.dt_edge_dic = self.init_dt_edge_dic()
         self.dt_set = self.init_dt()
 
         if load_from_file:
@@ -50,8 +100,14 @@ class Env:
             self.save_vehicle_positions()  # 保存初始位置到文件
             self.edges = self.init_edges()
             self.save_edge_positions()
+
         self.tasks = self.generate_task_from_region()
         self.all_subtasks = self.get_all_subtasks()
+        # DT放置初始化
+        self.dt_edge_dic = self.init_dt_edge_dic()
+        self.update_dt_in_step()
+        self.edge_power_update()
+        self.set_vehicle_cpu()                                  #根据产生的任务设置车辆的算力
 
     def get_all_subtasks(self):
         sub_tasks = []
@@ -84,7 +140,9 @@ class Env:
             print(f"File {file_name} not found. Creating a new environment.")
             return None
 
-
+    #重置环境
+    def reset_env(self):
+        return self.load_env()
 
 
     ##########初始化DT#########################################
@@ -102,6 +160,7 @@ class Env:
         for i in range(self.edge_num):
             dt_edge_dic[str(i)] = ""
         #print(dt_edge_dic)
+
         return dt_edge_dic
 
     #对DT的放置位置进行修改
@@ -143,9 +202,9 @@ class Env:
                     self.dt_edge_dic[str(nearest_edge.edge_id)] = []
                 self.dt_edge_dic[str(nearest_edge.edge_id)].append(vehicle.vec_id)
 
-        print("Updated DT to Edge mapping:")
-        for edge_id, dts in self.dt_edge_dic.items():
-            print(f"Edge {edge_id}: {dts}")
+        # print("Updated DT to Edge mapping:")
+        # for edge_id, dts in self.dt_edge_dic.items():
+        #     print(f"Edge {edge_id}: {dts}")
 
     #子任务的DT放置为空
     def assign_task_dts_to_null(self):
@@ -168,6 +227,20 @@ class Env:
             tmp_edge = self.edges[int(key)]
             tmp_edge.current_CPU =tmp_edge.CPU - len(value)*dt_computing_power
 
+    #根据dt的id查询对应放置的edge
+    def find_dt_place(self, target_dt):
+        dt_dic = self.dt_edge_dic
+        # 查找包含目标值的键
+        result_key = None
+        for key, value_list in dt_dic.items():
+            if target_dt in value_list:
+                result_key = key
+                break  # 找到后可以直接退出循环
+
+        if result_key == None:
+            print('dt is not placed')
+        else:
+            return result_key
 
     ##########初始化Edge Server################################
     def init_edges(self):
@@ -315,6 +388,14 @@ class Env:
                 return vehicle.location
         raise ValueError(f"Vehicle ID {vehicle_id} not found")
 
+    def set_vehicle_cpu(self):
+        task_id = [subtask.vehicle_id for subtask in self.all_subtasks]
+        for vehicle in self.vehicles:
+            if vehicle.vec_id not in task_id:
+                com_vehicle_probability = random.uniform(0,1)
+                if com_vehicle_probability <= computing_probability:
+                    vehicle.set_vehicle_cpu()
+
     def calculate_distance(self):
         """
         计算每辆车与所有边缘服务器的距离。
@@ -401,6 +482,14 @@ class Env:
                     vertical_lines.append((i * step_x, j * step_y))
 
         return grid_points, horizontal_lines, vertical_lines
+
+    #更新剩余时间
+    def task_delay_update(self):
+        if self.tasks[0].task_delay <= time_slot:
+            self.tasks[0].task_delay = 0
+        else:
+            self.tasks[0].task_delay -= time_slot
+
 
     ##########画图################################
     def animate(self, frames=100, interval=100):
@@ -578,14 +667,6 @@ class Env:
                     return sub_task
         return None
 
-    ###########现在需要进行决策###############
-    def offloading_decisions(self):
-        current_ready_tasks = []
-        for task in self.tasks:
-            current_ready_tasks.append(task.get_ready_subtasks())
-
-        #决策需包含传输功率与目标
-        return current_ready_tasks
 
     ############生成特征图####################
     def normalize_features(self, x):
@@ -622,10 +703,12 @@ class Env:
         for subtask in all_subtasks:
             distance_features = all_distance[subtask.vehicle_id]  # 距离特征（已计算）
             available_power = self.get_available_edges_power(distance_features)  # 可用功率
+            dt = self.dt_set[subtask.vehicle_id]
 
             # 展平距离和功率特征，并组合成单个特征列表
             node_features = [
                 subtask.subtask_ready,
+                dt.current_update/dt.update_size,                          #dt的更新情况
                 subtask.data_size / max_data_size * subtask.subtask_done,  # 归一化的数据大小
                 *distance_features,  # 展平距离特征
                 *available_power  # 展平功率特征
@@ -669,25 +752,186 @@ class Env:
     def network_observation(self):
         net_obs = []
 
+    ##############对action进行处理##############
+    def process_actions(self, actions):
+        sub_tasks = subtasks_dag
+        num_edges = self.edge_num
+        # 确保 actions 是 NumPy 数组
+        tmp_actions = actions.cpu().detach().numpy() if isinstance(actions, T.Tensor) else np.array(actions)
+        actions = tmp_actions[0]
+
+
+        # 切割动作
+        edge_logits = actions[:sub_tasks * num_edges]  # 前 sub_tasks * num_edges
+        completion_rates = actions[sub_tasks * num_edges:]  # 最后 sub_tasks
+
+        # 重组 edge_logits 为 [sub_tasks, num_edges]
+        edge_logits = edge_logits.reshape(sub_tasks, num_edges)
+
+        # 从每个任务的边缘节点分布中选择最大概率的索引
+        edge_selection = np.argmax(edge_logits, axis=1)
+
+        return edge_selection, completion_rates
+
+
+    ##########分配计算资源####################
+
+    def allocate_resources(self, offload_subtasks):
+        following_size = [self.tasks[0].get_descendant_subtasks(off_task) for off_task in
+                          offload_subtasks]
+        #subtasks 就是排序后的任务
+        _, subtasks = ordering_subtasks_or_cpu(following_size, offload_subtasks)
+
+        used_vec = []
+        for subtask in subtasks:
+            ava_cn_id = []
+            process_data = []
+
+            edge_id = int(self.find_dt_place(subtask.vehicle_id))
+
+            edge_loc = self.edges[edge_id].location
+            for vec in self.vehicles:
+                if vec.local_computing == 0 or vec.vec_id in used_vec:
+                    pass
+                else:
+                    distance = calculate_real_distance(vec.location, edge_loc)
+                    if distance == -1:
+                        pass
+                    else:
+                        ava_cn_id.append(vec.vec_id)
+                        process_data.append(calculate_process_data(vec.location, edge_loc, vec.local_computing))
+
+            #计算在edge上能算多少
+            edge_power = self.edges[edge_id].current_CPU
+            if edge_power >= edge_cpu_for_task:
+                edge_data_process = edge_cpu_for_task * time_slot / com_density
+            else:
+                edge_data_process = edge_power * time_slot / com_density
+            process_data.append(edge_data_process)
+
+            # -1表示在edge上完成
+            ava_cn_id.append(-1)
+
+            # 对可选的计算节点进行排序
+            ordered_data_size, result_id = ordering_subtasks_or_cpu(process_data, ava_cn_id)
+
+            #选择结果
+            choose = result_id[0]
+            if choose == -1:
+                #如果选择的是在edge上算则更新edge的算力，需注意之后可能需要重置
+                self.edges[edge_id].computing_power_cost(edge_cpu_for_task)
+            else:
+                used_vec.append(choose)
+
+            #更新任务数据量, 下面的函数会直接将完成任务的done 置为0表示完成
+            subtask.compute_data(ordered_data_size[0])
+
+
+    #########DT传输数据更新
+    def dt_update_after_actions(self, edge_selection, completion_rates):
+        # 首先将所有DT位置以最近分配，并删除子任务的放置
+        self.update_dt_in_step()
+
+
+        for index, sub_task in enumerate(self.all_subtasks):
+            # 根据动作进行放置
+            self.dt_edge_dic[str(edge_selection[index])].append(sub_task.vehicle_id)
+
+        # 根据放置的DT更新edge的算力
+        self.edge_power_update()
+
+        # 可以开始卸载的任务
+        offload_subtasks = []
+
+        # 更新DT的数据
+        for index, sub_task in enumerate(self.all_subtasks):
+
+            # 任务是可以处理的并且没有完成
+            if sub_task.subtask_ready == 1 and sub_task.subtask_done != 0:
+                Dt_id = sub_task.vehicle_id
+                dt = self.dt_set[Dt_id]
+
+                # 如果任务已经符合更新要求，则放入待计算卸载任务中
+                if dt.update_done:
+                    offload_subtasks.append(sub_task)
+                else:
+                    vec_dt_id = sub_task.vehicle_id
+                    vec_loc = self.vehicles[vec_dt_id].location
+                    edge_loc = self.edges[edge_selection[index]].location
+
+                    # 在该时隙更新dt
+                    # 1.计算车辆到edge的传输速率
+                    # 2.计算更新的dt数据量
+                    # 3.更改dt状态，如果已经达到要求
+                    trans_rate = Comm.trans_rate(vec_loc, edge_loc, tran_power)
+                    update_dt_size = trans_rate * time_slot
+                    dt.dt_update(update_dt_size)
+                    required_accuracy = completion_rates[index] * (max_accuracy - min_accuracy) + min_accuracy
+                    dt.if_dy_update(required_accuracy)
+
+
+        #返回该时隙可以卸载的任务
+        return offload_subtasks
+
+
+
     #############step函数######################
-    def step(self, DT_actions):
+    def step(self, DT_actions, new_action=False):
+        edge_selection, completion_rates = self.process_actions(DT_actions)
+
+        #需要做卸载决策的子任务集合
+        offload_subtasks = self.dt_update_after_actions(edge_selection, completion_rates)
+
+
+        if offload_subtasks:
+            self.allocate_resources(offload_subtasks)
+
+        # 更新剩余时间
+        self.task_delay_update()
+
+        # 更新车辆位置
+        self.move_vehicles()
+
+        # 更新DAG图,并且将可以处理的任务的ready置1
+        self.tasks[0].update_task_status()
+        _=self.tasks[0].get_ready_subtasks()
 
         x, edges = self.get_gcn_inputs()
         delay = self.tasks[0].task_delay
         ready, edge = self.generate_masks()
-        return 1,x,edges,delay, ready, edge
+        return 1,x,edges, delay, ready, edge
 
 
 
 if __name__ == "__main__":
-    # edge_num = 16
-    # vec_num =20
-    # env = Env(edge_num, vec_num, False)
-    # env.save_env()
-    env = Env.load_env()
-    env.tasks[0].plot_dependency_graph()
-    ready, edge = env.generate_masks()
-    print('pass')
+    ####生成新的环境
+    edge_num = 16
+    vec_num =20
+    env = Env(edge_num, vec_num, True)
+    env.save_env()
+
+
+
+
+    #env = Env.load_env()
+    # env.tasks[0].plot_dependency_graph()
+    # ready, edge = env.generate_masks()
+    # task = env.tasks[0]
+    # offloading_tasks = [task.subtasks[2], task.subtasks[3], task.subtasks[1]]
+    # size = [task.get_descendant_subtasks(of_task) for of_task in offloading_tasks]
+    # ordered_sub = ordering_subtasks(size, offloading_tasks)
+    # print([subtask.subtask_index for subtask in ordered_sub])
+
+    ####测试计算每个时隙能处理的任务量
+    # env = Env.load_env()
+    # env.display_network()
+    # vec_loc =  env.vehicles[5].location
+    # edge_loc = env.edges[1].location
+    # vec_cpu = env.vehicles[15].local_computing
+    # print(calculate_process_data(vec_loc, edge_loc, vec_cpu))
+    # print(edge_cpu_for_task * time_slot/com_density)
+
+
 
 
     #env.visualize_local_computing(80)

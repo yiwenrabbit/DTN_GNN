@@ -4,7 +4,8 @@ G_t = 2      #发射增益
 f = 2.4e9    #传输带宽中心频率
 G_r = 2      #接收增益
 noise_power_density = -174      #白噪声功率密度(dBm/Hz)
-band_width = 20e6               #带宽 Hz
+band_width = 1e7               #带宽 Hz
+power = 30                      #0.5W功率27dbm
 
 def calculate_received_power(trans_loc, receive_loc, trans_power):
     """
@@ -54,6 +55,6 @@ def calculate_transmission_rate(received_power):
     return transmission_rate
 def trans_rate(ts_loc, re_loc, tran_power):
     receive_power = calculate_received_power(ts_loc, re_loc, tran_power)
-    rate = calculate_transmission_rate(receive_power)
-    return rate
+    rate = calculate_transmission_rate(receive_power)/1e6
+    return rate             #Mb/s
 

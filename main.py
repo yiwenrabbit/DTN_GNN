@@ -31,7 +31,7 @@ if __name__ == "__main__":
     vehicle_num = 20  # 假设有20辆车
 
     ###GCN参数设定#####################
-    Gcn_input_dim = 2 + 2 * edge_num
+    Gcn_input_dim = 3 + 2 * edge_num
     Gcn_hidden_dim = 32
     Gcn_output_dim = 16
 
@@ -54,15 +54,21 @@ if __name__ == "__main__":
     buffer = ReplayBuffer(max_size=max_size, x_dim=Gcn_input_dim, node_count=subtask_num ,edge_dim=edge_dim, action_dim=n_actions, batch_size=batch_size, ready_mask_dim=ready_mask_dim,distance_mask_dim=distance_mask_dim)
 
     ###游戏开始####
-    N_Games = 300       #进行多少次
+    N_Games = 2       #进行多少次
     MAX_STEPS = 400      #最多的时隙数
     total_steps = 0
+    best_score = 0
 
     for i in range(N_Games):  #obs是当前的观察，obs_是做完动作后的观察
+        if i==0:
+            pass
+        else:
+            env = env.reset_env()
+
         score = 0
         done = [False]
         episode_step = 1
-
+        done = [False]
         while not any(done):
 
             #获取节点和边
@@ -77,11 +83,9 @@ if __name__ == "__main__":
 
             reward, x_, edges_, new_remaining_time, new_ready_mask, new_distance_mask = env.step(actions)
 
-            if episode_step >= MAX_STEPS:
+            if episode_step >= MAX_STEPS or env.tasks[0].task_delay==0 or env.tasks[0].is_completed:
                 done = [True]
                 ave_re = (score + reward) / MAX_STEPS
-
-
 
             buffer.store_transition(x, edges, remaining_time, ready_mask, distance_mask,
                                     actions, reward, x_, edges_, new_remaining_time, new_ready_mask, new_distance_mask, done)
@@ -91,7 +95,8 @@ if __name__ == "__main__":
 
             score += reward
             step_reward = reward
-            print(step_reward, episode_step)
+            print(f"########Current episode: {episode_step}########")
+            print(f"Reward: {step_reward}, and informations:")
 
             #sheet.write(i, episode_step-1, step_reward)
 
@@ -104,11 +109,8 @@ if __name__ == "__main__":
 
             if episode_step == MAX_STEPS + 1:
                 print(i)
-                print("finish task number:", env.finish_task_num / env.task_num)
-                print("failed task number:", env.unfinish_task / env.task_num)
-                print("finished task percentage:", env.finish_task_percent())
-                #percent_jyz.append(env.finish_task_percent())
+
 
         if score > best_score:
-            DT_place_agent.save_checkpoint()
+            DT_place_agent.save_models()
             best_score = score

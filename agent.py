@@ -262,6 +262,7 @@ class Agent:
         self.update_network_parameters()
 
     def save_models(self):
+        print('... saving checkpoint ...')
         self.actor.save_checkpoint()
         self.target_actor.save_checkpoint()
         self.critic1.save_checkpoint()
@@ -271,6 +272,7 @@ class Agent:
         self.gcn.save_checkpoint()
 
     def load_models(self):
+        print('... loading checkpoint ...')
         self.actor.load_checkpoint()
         self.target_actor.load_checkpoint()
         self.critic1.load_checkpoint()

@@ -1,5 +1,7 @@
 import random
 
+local_computing_max = 1e9
+local_computing_min = 0.5e9
 
 class Vec:
     def __init__(self, vec_id, location, velocity, direction):
@@ -7,6 +9,10 @@ class Vec:
         self.location = location  # 当前坐标
         self.velocity = velocity  # 移动速度（以米/秒为单位）
         self.direction = direction  # 当前移动方向
+        self.local_computing = 0
+
+    def set_vehicle_cpu(self):
+        self.local_computing = random.uniform(local_computing_min, local_computing_max)
 
     def move(self, grid_points, horizontal_lines, vertical_lines, time_slot, x_axis, y_axis, grid_size):
         """

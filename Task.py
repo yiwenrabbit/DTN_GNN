@@ -38,16 +38,18 @@ class SubTask:
         """
         模拟处理指定数量的数据
         """
-        if self.trans_size == 0:  # 只有在数据传输完成后才可以处理数据
-            print(f"Task {self.task_id}, SubTask {self.subtask_id} is under computation!")
-            self.compute_size -= amount
-            self.compute_size = max(self.compute_size, 0)  # 确保计算大小不为负值
+        print(f"Subtask {self.subtask_index} of DT {self.vehicle_id}, Percentage:{1-self.compute_size/self.data_size}")
+        self.compute_size -= amount
+        self.compute_size = max(self.compute_size, 0)  # 确保计算大小不为负值
+        if self.compute_size == 0:
+            self.subtask_done = 0
+
 
     def is_completed(self):
         """
         判断子任务是否完成
         """
-        return self.compute_size == 0
+        return self.subtask_done == 0
 
     def __repr__(self):
         return (f"SubTask(task_id={self.task_id}, subtask_id={self.subtask_id}, vehicle_id={self.vehicle_id}, "
@@ -63,6 +65,7 @@ class Task:
         self.n_subtasks = n_subtasks
         self.vehicles = vehicles
         self.task_delay = np.random.uniform(min_delay, max_delay)
+        self.origin_task_delay = self.task_delay
 
         # 初始化子任务，确保 subtask_id 唯一
         self.subtasks = self.generate_unique_subtasks()
@@ -189,9 +192,6 @@ class Task:
                 self.graph.remove_node(subtask_id)
                 print(f"SubTask {subtask_id} completed and removed from the graph.")
 
-        # 更新所有子任务状态
-        self.update_subtask_status()
-
         # 如果图中没有节点，标记任务完成
         if len(self.graph.nodes) == 0:
             self.is_completed = True
@@ -212,6 +212,24 @@ class Task:
 
         plt.title(f"Dependency Graph for Task {self.task_id}")
         plt.show()
+
+    #######获取所有任务的后续关联任务数据大小
+    def get_descendant_subtasks(self, subtask):
+        """
+        获取指定子任务在 DAG 中的所有子节点任务
+        """
+        if not self.graph.has_node(subtask.subtask_id):
+            raise ValueError(f"SubTask {subtask.subtask_id} is not in the graph.")
+
+        # 使用 NetworkX 的 descendants 方法获取所有后续节点
+        descendant_ids = nx.descendants(self.graph, subtask.subtask_id)
+
+        # 找到所有对应的 SubTask 对象
+        descendant_subtasks_size = [
+            st.data_size for st in self.subtasks if st.subtask_id in descendant_ids
+        ]
+        #这里最后加的是任务当前剩余的任务量
+        return sum(descendant_subtasks_size)+subtask.compute_size
 
     def __repr__(self):
         return f"Task(task_id={self.task_id}, n_subtasks={self.n_subtasks}, is_completed={self.is_completed})"
