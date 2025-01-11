@@ -1,14 +1,15 @@
-import torch
+import torch as T
 from torch_geometric.nn import GCNConv
 from torch_geometric.data import Data, Batch
 
-class GCNModel(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
+class GCNModel(T.nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_classes):
         super(GCNModel, self).__init__()
         self.conv1 = GCNConv(input_dim, hidden_dim)
         self.conv2 = GCNConv(hidden_dim, output_dim)
-
-
+        self.fc_out = T.nn.Linear(output_dim, num_classes)  # 分类头，映射到分类维度
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+        self.to(self.device)
 
     def forward(self, x, edge_index):
         """
@@ -18,8 +19,12 @@ class GCNModel(torch.nn.Module):
         - edge_index: 边索引张量列表，长度为 batch_size，每个元素是 [2, num_edges]
 
         返回:
-        - output: 合并后的节点特征，形状为 [batch_size, num_nodes, output_dim]
+        - output: 合并后的节点状态分类结果，形状为 [batch_size, num_nodes, num_classes]
         """
+        # 确保输入张量在模型所在的设备上
+        x = x.to(self.device)
+        edge_index = edge_index.to(self.device)
+
         if len(x.size()) == 3:  # 如果输入是批量数据
             batch_size, num_nodes, _ = x.size()
             outputs = []
@@ -30,24 +35,30 @@ class GCNModel(torch.nn.Module):
 
                 # 单图的图卷积处理
                 h = self.conv1(single_x, single_edge_index)
-                h = torch.relu(h)
+                h = T.relu(h)
                 h = self.conv2(h, single_edge_index)
+                h = T.relu(h)
+                h = self.fc_out(h)  # 分类头映射到分类维度
                 outputs.append(h)  # 保存每个图的结果
 
             # 拼接所有图的输出
-            output = torch.stack(outputs, dim=0)  # [batch_size, num_nodes, output_dim]
+            output = T.stack(outputs, dim=0)  # [batch_size, num_nodes, num_classes]
             return output
+
         else:  # 如果输入是单图数据
             h = self.conv1(x, edge_index)
-            h = torch.relu(h)
+            h = T.relu(h)
             h = self.conv2(h, edge_index)
+            h = T.relu(h)
+            h = self.fc_out(h)  # 映射到分类维度
             return h
+
 
     def save_checkpoint(self, path='./tmp/gcn.pth'):
         """
         保存 GCN 模型的参数
         """
-        torch.save(self.state_dict(), path)
+        T.save(self.state_dict(), path)
         print(f"GCN model saved to {path}")
 
     def load_checkpoint(self, path='./tmp/gcn.pth'):
@@ -55,7 +66,7 @@ class GCNModel(torch.nn.Module):
         加载 GCN 模型的参数
         """
         try:
-            self.load_state_dict(torch.load(path))
+            self.load_state_dict(T.load(path))
             print(f"GCN model loaded from {path}")
         except FileNotFoundError:
             print(f"Checkpoint not found at {path}. Model not loaded.")

@@ -60,7 +60,7 @@ class ActorNetwork(nn.Module):
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
         self.to(self.device)
 
-    def forward(self, state, ready_mask, distance_mask):
+    def forward(self, state, ready_mask, distance_mask, done_mask, off_mask):
         """
         参数:
             state: 输入的状态特征 [batch_size, input_dims]
@@ -78,9 +78,6 @@ class ActorNetwork(nn.Module):
         # Raw actions output
         logits = self.pi(x)  # [batch_size, total_actions]
 
-        # # 把mask变为tensor
-        # distance_mask = T.tensor(distance_mask).to(self.device)  # 确保在设备上
-        # ready_mask = T.tensor(ready_mask).to(self.device)  # 如果 ready_mask 也需要
 
         # Split logits into Edge logits and completion rate logits
         edge_logits = logits[:, :self.n_subtasks * self.n_edges]  # 前 n_subtasks * n_edges
@@ -96,13 +93,13 @@ class ActorNetwork(nn.Module):
         edge_probs = F.softmax(masked_edge_logits, dim=2)  # [batch_size, n_subtasks, n_edges]
 
         # Apply tanh to completion logits and scale to [0, 1]
-        raw_completion_rates = T.tanh(completion_logits)  # [-1, 1]
-        completion_rates = (raw_completion_rates + 1) / 2  # [0, 1]
+        raw_completion_rates = T.sigmoid(completion_logits)  # [-1, 1]
 
         # Apply ready mask to completion rates
-        completion_rates = completion_rates * ready_mask  # [batch_size, n_subtasks]
+        completion_rates = raw_completion_rates * ready_mask * done_mask * off_mask  # [batch_size, n_subtasks]
 
         return edge_probs, completion_rates
+
 
     def save_checkpoint(self):
         T.save(self.state_dict(), self.chkpt_file)

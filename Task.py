@@ -2,11 +2,11 @@ import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 
-max_data_size=500
-min_data_size=100
+max_data_size=60
+min_data_size=30
 com_density = 1e7
 min_delay = 30          #任务最小时延
-max_delay = 50          #任务最大时延
+max_delay = 40          #任务最大时延
 
 class SubTask:
     """
@@ -18,12 +18,18 @@ class SubTask:
         self.vehicle_id = vehicle_id
         self.subtask_id = f"{task_id}-{subtask_index}"  # 唯一的子任务 ID
         self.data_size = data_size if data_size else np.random.randint(min_data_size, max_data_size)  # 单位为 Mb
-        self.cpu_cycles = cpu_cycles if cpu_cycles else self.data_size * com_density  # 假设每 Mb 数据需要 1e7 个 CPU 周期
-        self.trans_size = self.data_size  # 如果需要传输，传输数据不为 0
+        # self.cpu_cycles = cpu_cycles if cpu_cycles else self.data_size * com_density  # 假设每 Mb 数据需要 1e7 个 CPU 周期
+        # self.trans_size = self.data_size  # 如果需要传输，传输数据不为 0
         self.compute_size = self.data_size  # 如果需要处理数据，初始值为数据大小
         self.offloading_target = [0,1]      # 第一位：0代表是在edge server上算，1代表在车上算  第二位：0
         self.subtask_ready = 0              # 标识当前任务是否可以处理，可以为1否则为0
         self.subtask_done = 1               # 标识当前任务是否处理完成，完成为0否则为1
+        self.off_tag = 1                    # 标识当前任务是否处于卸载状态,1表示没有，0表示正在卸载
+
+
+    def compute_size_accu(self, accuracy):
+        change = 0.5 * accuracy + 0.5
+        self.compute_size = self.data_size * change
 
 
     def transmit_data(self, amount):
@@ -38,7 +44,7 @@ class SubTask:
         """
         模拟处理指定数量的数据
         """
-        print(f"Subtask {self.subtask_index} of DT {self.vehicle_id}, Percentage:{1-self.compute_size/self.data_size}")
+        #print(f"Subtask {self.subtask_index} of DT {self.vehicle_id}, Percentage:{1-self.compute_size/self.data_size}")
         self.compute_size -= amount
         self.compute_size = max(self.compute_size, 0)  # 确保计算大小不为负值
         if self.compute_size == 0:
@@ -65,6 +71,7 @@ class Task:
         self.n_subtasks = n_subtasks
         self.vehicles = vehicles
         self.task_delay = np.random.uniform(min_delay, max_delay)
+        self.original_delay = self.task_delay
         self.origin_task_delay = self.task_delay
 
         # 初始化子任务，确保 subtask_id 唯一
@@ -196,6 +203,9 @@ class Task:
         if len(self.graph.nodes) == 0:
             self.is_completed = True
             print(f"Task {self.task_id} is completed!")
+            return True
+        else:
+            return False
 
     def plot_dependency_graph(self, color="lightblue"):
         """

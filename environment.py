@@ -17,13 +17,13 @@ import pickle
 x_axis = 1000  # 网络长 单位米
 y_axis = 1000  # 网络宽
 grid_size = 10  # 网格划分数量（每行/列的格子数）
-time_slot = 0.5  # 时隙长度为0.1秒
+time_slot = 0.1  # 时隙长度为0.1秒
 vechiles_for_task = 4 #判断区域中车辆数量是否超过该变量，如果是则生成任务
 subtasks_dag = 5      #每个任务的子任务数量
 max_data_size = Task.max_data_size      #子任务的大小定义在Task.py中
 min_data_size = Task.min_data_size
 com_density = Task.com_density          #计算密度
-max_edge_to_v_distance = 250            #大于这个距离为1
+max_edge_to_v_distance = 300           #大于这个距离为1
 min_edge_to_v_distance = 30             #小于这个距离为0
 dt_computing_power = 0.3e9              #DT在edge上会占据DT的算力
 edge_max_cpu  = EdgeServer.edge_max_cpu #edge的初始算力
@@ -34,15 +34,27 @@ tran_power = Comm.power                         #27dbm 传输功率
 min_delay = Task.min_delay              #任务最小时延
 max_delay = Task.max_delay               #任务最大时延
 
-min_accuracy = 0.8                      #DT上传的数据百分比最小值
+min_accuracy = 0.5                      #DT上传的数据百分比最小值
 max_accuracy = 1
 
 computing_probability = 0.8             #车辆是算力车辆的可能性
 edge_cpu_for_task = 0.5e9               #edge分配给每个任务的计算量
 
+min_speed = 3
+max_speed = 8                           #车辆速度10-30km/h
 
+#reward 参数
+time_over_due = -200
+task_finish = 200
+DT_update_reward = 50
+w1 = 0.5                                #精度权重
+w2 = 0.5                                #时延权重
+step_reward_factor = 10
 
-
+# =========mask 说明=======#
+#ready_mask 1:任务现在可以处理， 0:任务还不能处理
+#done_mask 1:还没有完成， 0:任务已经完成
+#off_mask 1:表示任务没有在卸载，0: 表示任务在卸载
 
 
 def ordering_subtasks_or_cpu(size, subtasks):    #对于算力的排序第一个是处理数据量，第二个是id
@@ -63,9 +75,6 @@ def calculate_process_data(vec_loc, edge_loc, vec_cpu):
     time = (time_slot * vec_cpu) /(tran_rate*com_density + vec_cpu)
     processed_data_size = time * tran_rate
     return processed_data_size
-
-
-
 
 
 #计算真实距离
@@ -306,9 +315,16 @@ class Env:
     #返回当前edge的算力
     def get_edges_power(self):
         power = []
-        for edge in self.edges:
+        edge_vec_power = np.zeros(self.edge_num)
+        for index, edge in enumerate(self.edges):
+            for vec in self.vehicles:
+                vec_com = vec.local_computing
+                if vec_com != 0:
+                    distance = calculate_real_distance(vec.location, edge.location)
+                    if distance <= max_edge_to_v_distance and distance != -1:
+                        edge_vec_power[index] += vec_com/edge_max_cpu
             power.append(edge.current_CPU/edge_max_cpu)
-        return power
+        return np.array(power) + edge_vec_power
 
     def get_available_edges_power(self, distance):
         powers = self.get_edges_power()
@@ -367,7 +383,7 @@ class Env:
                 start_location = random.choice(self.vertical_lines)
                 direction = random.choice(["up", "down"])
 
-            velocity = random.uniform(10, 50)  # 随机分配速度
+            velocity = random.uniform(min_speed, max_speed)  # 随机分配速度
             vehicles.append(VE.Vec(vec_id=i, location=start_location, velocity=velocity, direction=direction))
 
             # 调试打印车辆初始化信息
@@ -701,8 +717,7 @@ class Env:
         # 每个子任务的特征： [subtask_ready, normalized_data_size, flattened_distance, available_edge_power]
         raw_features = []
         for subtask in all_subtasks:
-            distance_features = all_distance[subtask.vehicle_id]  # 距离特征（已计算）
-            available_power = self.get_available_edges_power(distance_features)  # 可用功率
+
             dt = self.dt_set[subtask.vehicle_id]
 
             # 展平距离和功率特征，并组合成单个特征列表
@@ -710,8 +725,6 @@ class Env:
                 subtask.subtask_ready,
                 dt.current_update/dt.update_size,                          #dt的更新情况
                 subtask.data_size / max_data_size * subtask.subtask_done,  # 归一化的数据大小
-                *distance_features,  # 展平距离特征
-                *available_power  # 展平功率特征
             ]
             raw_features.append(node_features)
 
@@ -735,9 +748,13 @@ class Env:
         ready_mask = []
         edge_mask = []
         task_id = []
+        done_mask = []
+        off_mask = []
         for subtask in self.all_subtasks:
             ready_mask.append(subtask.subtask_ready)
             task_id.append(int(subtask.vehicle_id))
+            done_mask.append(subtask.subtask_done)
+            off_mask.append(subtask.off_tag)
 
         distance = self.calculate_distance()
 
@@ -745,7 +762,7 @@ class Env:
             edge_mask.append(distance[id])
         edge_mask = [[1 if x!=0 else 0 for x in row] for row in edge_mask]
 
-        return ready_mask, edge_mask
+        return ready_mask, edge_mask, done_mask, off_mask
 
 
     ############生成全局观察####################
@@ -763,7 +780,7 @@ class Env:
 
         # 切割动作
         edge_logits = actions[:sub_tasks * num_edges]  # 前 sub_tasks * num_edges
-        completion_rates = actions[sub_tasks * num_edges:]  # 最后 sub_tasks
+        decision_probs = actions[sub_tasks * num_edges:]  # 最后 sub_tasks
 
         # 重组 edge_logits 为 [sub_tasks, num_edges]
         edge_logits = edge_logits.reshape(sub_tasks, num_edges)
@@ -771,12 +788,14 @@ class Env:
         # 从每个任务的边缘节点分布中选择最大概率的索引
         edge_selection = np.argmax(edge_logits, axis=1)
 
-        return edge_selection, completion_rates
+        return edge_selection, decision_probs
 
 
     ##########分配计算资源####################
 
     def allocate_resources(self, offload_subtasks):
+        offloaded_size = 0
+
         following_size = [self.tasks[0].get_descendant_subtasks(off_task) for off_task in
                           offload_subtasks]
         #subtasks 就是排序后的任务
@@ -825,13 +844,19 @@ class Env:
 
             #更新任务数据量, 下面的函数会直接将完成任务的done 置为0表示完成
             subtask.compute_data(ordered_data_size[0])
+            offloaded_size += ordered_data_size[0]/subtask.data_size
+
+        return offloaded_size
+
+
 
 
     #########DT传输数据更新
-    def dt_update_after_actions(self, edge_selection, completion_rates):
+    def dt_update_after_actions(self, edge_selection, decision_probs):
+        update_size = 0
+        finish_reward = 0
         # 首先将所有DT位置以最近分配，并删除子任务的放置
         self.update_dt_in_step()
-
 
         for index, sub_task in enumerate(self.all_subtasks):
             # 根据动作进行放置
@@ -845,63 +870,166 @@ class Env:
 
         # 更新DT的数据
         for index, sub_task in enumerate(self.all_subtasks):
+            decision = decision_probs[index]
+            # 首先判断任务是不是已经完成的任务
+            if sub_task.subtask_done == 0:
+                #任务已经完成
+                continue
 
-            # 任务是可以处理的并且没有完成
-            if sub_task.subtask_ready == 1 and sub_task.subtask_done != 0:
-                Dt_id = sub_task.vehicle_id
-                dt = self.dt_set[Dt_id]
+            else:
+                # 任务还没有完成
+                if sub_task.subtask_ready == 0:
+                    # 任务还不能处理
+                    continue
 
-                # 如果任务已经符合更新要求，则放入待计算卸载任务中
-                if dt.update_done:
-                    offload_subtasks.append(sub_task)
                 else:
-                    vec_dt_id = sub_task.vehicle_id
-                    vec_loc = self.vehicles[vec_dt_id].location
-                    edge_loc = self.edges[edge_selection[index]].location
+                    # 任务现在可以处理
+                    if sub_task.off_tag == 0:
+                        # 任务正在卸载过程中
+                        offload_subtasks.append(sub_task)
+                    else:
+                        Dt_id = sub_task.vehicle_id
+                        dt = self.dt_set[Dt_id]
+                        # 任务没有在卸载
+                        if decision < 0.5:
+                            # 表示任务结束dt更新
+                            sub_task.off_tag = 0                #卸载标识置0
 
-                    # 在该时隙更新dt
-                    # 1.计算车辆到edge的传输速率
-                    # 2.计算更新的dt数据量
-                    # 3.更改dt状态，如果已经达到要求
-                    trans_rate = Comm.trans_rate(vec_loc, edge_loc, tran_power)
-                    update_dt_size = trans_rate * time_slot
-                    dt.dt_update(update_dt_size)
-                    required_accuracy = completion_rates[index] * (max_accuracy - min_accuracy) + min_accuracy
-                    dt.if_dy_update(required_accuracy)
+                            dt.update_done = True               #DT更新完成标识
+
+                            offload_subtasks.append(sub_task)
+
+                            accuracy = dt.return_accuracy()
+                            sub_task.compute_size_accu(accuracy)        #根据DT的更新量决定卸载任务数据量
+
+                            finish_reward += accuracy * step_reward_factor  #根据精度给予奖励
+                        else:
+                            #表示任务继续更新dt
+                            vec_dt_id = sub_task.vehicle_id
+                            vec_loc = self.vehicles[vec_dt_id].location
+                            edge_loc = self.edges[edge_selection[index]].location
+
+                            # 在该时隙更新dt
+                            # 1.计算车辆到edge的传输速率
+                            # 2.计算更新的dt数据量
+                            # 3.更改dt状态，如果已经达到要求
+                            trans_rate = Comm.trans_rate(vec_loc, edge_loc, tran_power)
+                            update_dt_size = trans_rate * time_slot
+
+                            # 更新并返回一个更新百分比的值
+                            update_size += dt.dt_update(update_dt_size)
+
+                            # 这个是达到100%DT更新的情况
+                            if dt.update_done == True:
+                                accuracy = dt.return_accuracy()
+                                sub_task.compute_size_accu(accuracy)  # 根据DT的更新量决定卸载任务数据量
+                                sub_task.off_tag = 0
+                                finish_reward += accuracy * step_reward_factor  # 根据精度给予奖励
+
+
 
 
         #返回该时隙可以卸载的任务
-        return offload_subtasks
-
+        return offload_subtasks, update_size, finish_reward
 
 
     #############step函数######################
     def step(self, DT_actions, new_action=False):
+        reward = 0
         edge_selection, completion_rates = self.process_actions(DT_actions)
 
         #需要做卸载决策的子任务集合
-        offload_subtasks = self.dt_update_after_actions(edge_selection, completion_rates)
+        offload_subtasks, update_size, finish_reward = self.dt_update_after_actions(edge_selection, completion_rates)
 
 
         if offload_subtasks:
-            self.allocate_resources(offload_subtasks)
+            offloaded_size = self.allocate_resources(offload_subtasks)
+        else:
+            offloaded_size = 0
+
+        reward += update_size + offloaded_size + finish_reward
 
         # 更新剩余时间
         self.task_delay_update()
+
 
         # 更新车辆位置
         self.move_vehicles()
 
         # 更新DAG图,并且将可以处理的任务的ready置1
-        self.tasks[0].update_task_status()
+        status = self.tasks[0].update_task_status()
+        if status:
+            print(f"Accuracy: {self.return_dt_accuracy()}")
+
         _=self.tasks[0].get_ready_subtasks()
 
+        # 时延约束到达，或者任务提前完成
+        if self.tasks[0].task_delay == 0 and self.tasks[0].is_completed == False:
+            reward += time_over_due
+
+        else:
+            if self.tasks[0].task_delay >= 0 and self.tasks[0].is_completed == True:
+
+                #最小精度和平均精度
+                min_accuracy, ave_accuracy = self.return_dt_accuracy()
+                delay = self.tasks[0].task_delay / self.tasks[0].original_delay
+                final_reward = w1 * ave_accuracy + w2 * (1 - delay)
+                #reward += final_reward * task_finish
+
         x, edges = self.get_gcn_inputs()
-        delay = self.tasks[0].task_delay
-        ready, edge = self.generate_masks()
-        return 1,x,edges, delay, ready, edge
+        network_states = self.get_network_state()
+        ready, edge, done_mask, off_mask = self.generate_masks()
 
+        return reward, x, edges, network_states, ready, edge, done_mask, off_mask
 
+    def return_dt_accuracy(self):
+        accuracy = []
+        for subtask in self.all_subtasks:
+            accuracy.append(self.dt_set[subtask.vehicle_id].return_accuracy())
+
+        return min(accuracy), np.average(np.array(accuracy))
+
+    def print_all_accuracy(self):
+        for subtask in self.all_subtasks:
+            print(self.dt_set[subtask.vehicle_id].return_accuracy())
+
+    #获取网络状态####
+    def get_network_state(self):
+        # 任务时延归一化
+        task_delay = self.tasks[0].task_delay / max_delay
+
+        # 所有子任务的列表
+        all_subtasks = self.get_all_subtasks()
+
+        # 与所有 edge 的距离
+        all_distance = self.calculate_distance()
+
+        # 原始特征提取
+        raw_features = []
+        for subtask in all_subtasks:
+            distance_features = all_distance[subtask.vehicle_id]  # 距离特征（已计算）
+            available_power = self.get_available_edges_power(distance_features)  # 可用功率
+            dt = self.dt_set[subtask.vehicle_id]
+
+            # 组合单个子任务的特征
+            node_features = [
+                dt.current_update / dt.update_size,  # dt 的更新情况
+                subtask.compute_size / max_data_size * subtask.subtask_done,  # 数据大小归一化
+                *distance_features,  # 展平距离特征
+                *available_power  # 展平功率特征
+            ]
+            raw_features.append(node_features)
+
+        # 将 raw_features 转换为二维张量（[num_subtasks, feature_dim]）
+        raw_features = T.tensor(raw_features, dtype=T.float)
+
+        # 展平 raw_features（将 [num_subtasks, feature_dim] 转为 [num_subtasks * feature_dim]）
+        flattened_features = raw_features.flatten()
+
+        # 拼接当前任务时延
+        network_state = T.cat([flattened_features, T.tensor([task_delay], dtype=T.float)])
+
+        return network_state
 
 if __name__ == "__main__":
     ####生成新的环境

@@ -5,7 +5,7 @@ f = 2.4e9    #传输带宽中心频率
 G_r = 2      #接收增益
 noise_power_density = -174      #白噪声功率密度(dBm/Hz)
 band_width = 1e7               #带宽 Hz
-power = 30                      #0.5W功率27dbm
+power = 30                      #0.5W功率27dbm 1w 30dbm
 
 def calculate_received_power(trans_loc, receive_loc, trans_power):
     """
@@ -21,7 +21,9 @@ def calculate_received_power(trans_loc, receive_loc, trans_power):
     distance = np.linalg.norm(trans_loc - receive_loc)
 
     if distance == 0:
-        raise ValueError("Transmitter and receiver cannot be at the same location.")
+        distance = 30
+        #raise ValueError("Transmitter and receiver cannot be at the same location.")
+
 
     # 计算路径损耗 L (dB)
     L = 20 * np.log10(distance) + 20 * np.log10(f) - 147.55
@@ -57,4 +59,3 @@ def trans_rate(ts_loc, re_loc, tran_power):
     receive_power = calculate_received_power(ts_loc, re_loc, tran_power)
     rate = calculate_transmission_rate(receive_power)/1e6
     return rate             #Mb/s
-
