@@ -71,9 +71,9 @@ class ActorNetwork(nn.Module):
             completion_rates: 任务完成率 [batch_size, n_subtasks]
         """
         # Forward pass through the network
-        x = F.leaky_relu(self.fc1(state), negative_slope=0.1)
-        x = F.leaky_relu(self.fc2(x), negative_slope=0.1)
-        x = F.leaky_relu(self.fc3(x), negative_slope=0.1)
+        x = F.leaky_relu(self.fc1(state), negative_slope=0.2)
+        x = F.leaky_relu(self.fc2(x), negative_slope=0.2)
+        x = F.leaky_relu(self.fc3(x), negative_slope=0.2)
 
         # Raw actions output
         logits = self.pi(x)  # [batch_size, total_actions]

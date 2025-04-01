@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 max_data_size=60
 min_data_size=30
 com_density = 1e7
-min_delay = 30          #任务最小时延
-max_delay = 40          #任务最大时延
+min_delay = 10          #任务最小时延
+max_delay = 15          #任务最大时延
 
 class SubTask:
     """
@@ -25,7 +25,7 @@ class SubTask:
         self.subtask_ready = 0              # 标识当前任务是否可以处理，可以为1否则为0
         self.subtask_done = 1               # 标识当前任务是否处理完成，完成为0否则为1
         self.off_tag = 1                    # 标识当前任务是否处于卸载状态,1表示没有，0表示正在卸载
-
+        self.reward_given = False
 
     def compute_size_accu(self, accuracy):
         change = 0.5 * accuracy + 0.5
@@ -81,9 +81,73 @@ class Task:
         self.graph = self.build_dependency_graph()  # 构建任务依赖图
         self.original_graph = self.graph.copy()  # 保留完整的图
         self.is_completed = False  # 标志任务是否完成
-
+        #自动计算传播中心性
+        #self.centrality_scores = self.calculate_betweenness_centrality()
         # 初始化子任务的状态
+        # 计算传播性
+        #self.task_spread = self.calculate_task_spread()  # 新增：计算并存储传播性
         self.update_subtask_status()
+
+    def calculate_task_spread(self):
+        """
+        计算每个子任务的传播性，结合：
+        1. 出度 (out-degree)：任务影响的直接后续任务数
+        2. PageRank：衡量全局传播性
+        3. 关键路径长度：任务影响整个 DAG 任务完成的程度
+        """
+        if self.graph is None or len(self.graph.nodes) == 0:
+            return {}
+
+        # 计算每个子任务的出度中心性
+        out_degree_centrality = nx.out_degree_centrality(self.graph)
+
+        # 计算 PageRank 作为全局传播性指标
+        pagerank_centrality = nx.pagerank(self.graph, alpha=0.85)
+
+        # 计算关键路径长度
+        longest_path_length = {}
+        for node in self.graph.nodes:
+            # 计算从当前节点到终点的最长路径
+            longest_path_length[node] = nx.dag_longest_path_length(self.graph.subgraph(nx.descendants(self.graph, node).union({node})))
+
+        # 归一化关键路径长度
+        max_length = max(longest_path_length.values()) if longest_path_length else 1
+        normalized_path_length = {node: val / max_length for node, val in longest_path_length.items()}
+
+        # 计算最终传播性度量
+        task_spread = {}
+        for node in self.graph.nodes:
+            # 动态权重分配
+            weight_out_degree = 0.4  # 出度中心性权重
+            weight_pagerank = 0.3   # PageRank 权重
+            weight_path_length = 0.3  # 关键路径长度权重
+
+            # 计算传播性
+            task_spread[node] = (
+                    weight_out_degree * out_degree_centrality[node] +
+                    weight_pagerank * pagerank_centrality[node] +
+                    weight_path_length * normalized_path_length[node]
+            )
+
+        return task_spread
+
+
+    #计算中心度
+    # def calculate_betweenness_centrality(self):
+    #     """
+    #     计算 DAG（self.graph）中 **每个子任务** 的传播中心性。
+    #     返回一个字典 {subtask_id: centrality_value}
+    #     """
+    #     # 如果图为空或未正确生成，则返回空字典
+    #     if self.graph is None or len(self.graph.nodes) == 0:
+    #         return {}
+    #
+    #     # 计算每个子任务的传播中心性
+    #     # betweenness_centrality() 返回的字典 {subtask_id: center_value}
+    #     centrality = nx.betweenness_centrality(self.graph, normalized=True)
+    #
+    #     # 返回包含传播中心性的字典
+    #     return centrality  # {subtask_id: 中心性数值}
 
     def generate_unique_subtasks(self):
         """

@@ -44,11 +44,12 @@ min_speed = 3
 max_speed = 8                           #车辆速度10-30km/h
 
 #reward 参数
-time_over_due = -200
-task_finish = 200
+time_over_due = -30
+task_finish = 30
 DT_update_reward = 50
 w1 = 0.5                                #精度权重
-w2 = 0.5                                #时延权重
+w2 = 0.5 #时延权重
+
 step_reward_factor = 10
 
 # =========mask 说明=======#
@@ -117,6 +118,7 @@ class Env:
         self.update_dt_in_step()
         self.edge_power_update()
         self.set_vehicle_cpu()                                  #根据产生的任务设置车辆的算力
+        self.task_spread_factor = self.tasks[0].calculate_task_spread()
 
     def get_all_subtasks(self):
         sub_tasks = []
@@ -849,10 +851,9 @@ class Env:
         return offloaded_size
 
 
-
-
     #########DT传输数据更新
     def dt_update_after_actions(self, edge_selection, decision_probs):
+
         update_size = 0
         finish_reward = 0
         # 首先将所有DT位置以最近分配，并删除子任务的放置
@@ -902,7 +903,7 @@ class Env:
                             accuracy = dt.return_accuracy()
                             sub_task.compute_size_accu(accuracy)        #根据DT的更新量决定卸载任务数据量
 
-                            finish_reward += accuracy * step_reward_factor  #根据精度给予奖励
+                            finish_reward += (accuracy - 0.5) * step_reward_factor   #根据精度给予奖励
                         else:
                             #表示任务继续更新dt
                             vec_dt_id = sub_task.vehicle_id
@@ -915,16 +916,16 @@ class Env:
                             # 3.更改dt状态，如果已经达到要求
                             trans_rate = Comm.trans_rate(vec_loc, edge_loc, tran_power)
                             update_dt_size = trans_rate * time_slot
-
+                            ratio = dt.dt_update(update_dt_size)
                             # 更新并返回一个更新百分比的值
-                            update_size += dt.dt_update(update_dt_size)
+                            update_size += ratio - time_slot * self.task_spread_factor[sub_task.subtask_id]
 
                             # 这个是达到100%DT更新的情况
                             if dt.update_done == True:
                                 accuracy = dt.return_accuracy()
                                 sub_task.compute_size_accu(accuracy)  # 根据DT的更新量决定卸载任务数据量
                                 sub_task.off_tag = 0
-                                finish_reward += accuracy * step_reward_factor  # 根据精度给予奖励
+                                finish_reward += (accuracy - 0.8) * step_reward_factor  # 根据精度给予奖励
 
 
 
@@ -947,7 +948,7 @@ class Env:
         else:
             offloaded_size = 0
 
-        reward += update_size + offloaded_size + finish_reward
+        reward += update_size  + finish_reward
 
         # 更新剩余时间
         self.task_delay_update()
@@ -974,14 +975,13 @@ class Env:
                 min_accuracy, ave_accuracy = self.return_dt_accuracy()
                 delay = self.tasks[0].task_delay / self.tasks[0].original_delay
                 final_reward = w1 * ave_accuracy + w2 * (1 - delay)
-                #reward += final_reward * task_finish
+                reward += final_reward * task_finish
 
         x, edges = self.get_gcn_inputs()
         network_states = self.get_network_state()
         ready, edge, done_mask, off_mask = self.generate_masks()
 
         return reward, x, edges, network_states, ready, edge, done_mask, off_mask
-
     def return_dt_accuracy(self):
         accuracy = []
         for subtask in self.all_subtasks:

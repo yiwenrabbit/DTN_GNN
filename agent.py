@@ -5,7 +5,7 @@ from Network import ActorNetwork, CriticNetwork
 from GNN import GCNModel
 
 delta = 0.5  # Actor 损失权重
-num_class = 4  # 分类任务的类别数
+
 
 
 class Agent:
@@ -22,7 +22,7 @@ class Agent:
         self.agent_name = f'agent_{agent_idx}'
 
         # 初始化网络
-        self.gcn = GCNModel(gcn_input_dim, gcn_hidden_dim, gcn_output_dim, num_class).to(self.device)
+        self.gcn = GCNModel(gcn_input_dim, gcn_hidden_dim, gcn_output_dim).to(self.device)
         self.actor = ActorNetwork(alpha, actor_dims, fc1, fc2, fc3, n_subtasks, n_edges,
                                   chkpt_dir=chkpt_dir, name=f'{self.agent_name}_actor').to(self.device)
         self.critic1 = CriticNetwork(beta, critic_dims, fc1, fc2, fc3, n_actions,
@@ -43,10 +43,10 @@ class Agent:
         self.update_network_parameters(tau=1)
 
     def choose_action(self, gcn_x, edge_index, network_states, episode, ready_mask, distance_mask, done_mask, off_mask,
-                      alpha=0.1):
+                      alpha=1):
         # 动作探索的衰减策略
-        alpha = max(0.01, alpha - 0.0001 * episode)
-        temperature = max(0.1, 1.0 - 0.0001 * episode)  # Gumbel-Softmax 温度
+        alpha = max(0.05, alpha - 0.00005 * episode)
+        temperature = max(0.4, 1.0 - 0.00005 * episode)  # Gumbel-Softmax 温度
 
         # 确保张量移动到正确的设备
         ready_mask = T.tensor(ready_mask, dtype=T.float).to(self.device)
@@ -74,7 +74,7 @@ class Agent:
             edge_actions.append(sampled_edge)
 
         # === Decision 动作选择 ===
-        decision_noise = alpha * T.randn_like(decision_probs).to(self.device)
+        decision_noise = alpha * (T.randn_like(decision_probs).to(self.device)+0.5)
         noisy_decision_probs = (decision_probs + decision_noise).clamp(0, 1)  # 加噪声
         decision_actions = noisy_decision_probs * ready_mask * off_mask
 
@@ -166,9 +166,13 @@ class Agent:
 
         self.critic1.optimizer.zero_grad()
         self.critic2.optimizer.zero_grad()
+        self.gcn_optimizer.zero_grad()
+
         critic_loss.backward(retain_graph=True)
         self.critic1.optimizer.step()
         self.critic2.optimizer.step()
+
+
 
         # === Actor 损失 ===
         edge_logits, decision_probs = self.actor.forward(states, ready_mask, distance_mask, done_mask, off_mask)
@@ -183,9 +187,9 @@ class Agent:
         self.actor.optimizer.step()
 
         # === GCN 损失 ===
-        self.gcn_optimizer.zero_grad()
-        gcn_loss = F.cross_entropy(gcn_output.view(-1, num_class), done_mask.view(-1).long())
-        gcn_loss.backward()
+        #self.gcn_optimizer.zero_grad()
+        #gcn_loss = F.cross_entropy(gcn_output.view(-1, num_class), done_mask.view(-1).long())
+        #gcn_loss.backward()
         self.gcn_optimizer.step()
 
         # 更新目标网络

@@ -32,9 +32,9 @@ plot_data(x, y, label="loss", color="red")
 
 
 # 添加标题和标签
-plt.title("loss Plot")
+plt.title("reward Plot")
 plt.xlabel("Episode")
-plt.ylabel("loss")
+plt.ylabel("Reward")
 plt.legend()
 plt.grid()
 plt.show()
