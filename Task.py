@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 max_data_size=60
 min_data_size=30
 com_density = 1e7
-min_delay = 10          #任务最小时延
-max_delay = 15          #任务最大时延
+min_delay = 15          #任务最小时延
+max_delay = 20          #任务最大时延
 
 class SubTask:
     """

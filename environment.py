@@ -866,6 +866,7 @@ class Env:
         # 更新DT的数据
         for index, sub_task in enumerate(self.all_subtasks):
             decision = decision_probs[index]
+            print("decision", decision)
             # 首先判断任务是不是已经完成的任务
             if sub_task.subtask_done == 0:
                 # 任务已经完成
@@ -886,7 +887,7 @@ class Env:
                         Dt_id = sub_task.vehicle_id
                         dt = self.dt_set[Dt_id]
                         # 任务没有在卸载
-                        if decision < 0.5:
+                        if random.random() < decision:
                             # 表示任务结束dt更新
                             sub_task.off_tag = 0  # 卸载标识置0
 

@@ -19,7 +19,9 @@ swanlab.init(
     key="O37YbyiqLiKdFHyc29Xtg",
     project="DTN",
     experiment_name=f"{current_time}",  # 使用当前时间作为 experiment_name
+    workspace="yiwenrabbit"
 )
+
 
 def obs_list_to_state_vector(observation):
     obs_clone = observation.clone()
@@ -166,7 +168,8 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"Error in environment step: {e}")
                 break
-
+            for count in env.tasks:
+                print("delay", count.task_delay)
             # 结束条件
             if episode_step >= MAX_STEPS or env.tasks[0].task_delay == 0 or env.tasks[0].is_completed:
                 done = True
@@ -180,6 +183,7 @@ if __name__ == "__main__":
                     combined_text += f"Task {kp + 1}: {str(task_status[kp])} \n"
                 combined_text += "\n"
                 swanlab.log({f"epoch {i + 1}": [swanlab.Text(combined_text, caption=f"Epoch {i + 1}")]})
+                # env.tasks[0].task_delay
                 if env.tasks[0].task_delay == 0 and not env.tasks[0].is_completed:
                     print(f"Task failed in Episode {i + 1}!")
 
