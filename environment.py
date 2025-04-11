@@ -44,7 +44,7 @@ min_speed = 3
 max_speed = 8  # 车辆速度10-30km/h
 
 # reward 参数
-time_over_due = -30
+time_over_due = -15
 task_finish = 30
 DT_update_reward = 50
 w1 = 0.5  # 精度权重
@@ -955,7 +955,8 @@ class Env:
 
         # 时延约束到达，或者任务提前完成
         if self.tasks[0].task_delay == 0 and self.tasks[0].is_completed == False:
-            reward += time_over_due
+            if reward > 0:
+                reward += time_over_due
 
         else:
             if self.tasks[0].task_delay >= 0 and self.tasks[0].is_completed == True:

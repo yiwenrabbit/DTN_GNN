@@ -14,6 +14,7 @@ import datetime
 
 current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 
+swanlab.login(api_key="O37YbyiqLiKdFHyc29Xtg")
 # 初始化 swanlab，experiment_name 设置为当前时间
 swanlab.init(
     key="O37YbyiqLiKdFHyc29Xtg",
@@ -119,7 +120,7 @@ if __name__ == "__main__":
     )
 
     ### 游戏开始 ###
-    N_Games = 300
+    N_Games = 1000
     MAX_STEPS = 200
     total_steps = 0
     best_score = -float('inf')
