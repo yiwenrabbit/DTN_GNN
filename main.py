@@ -132,9 +132,10 @@ if __name__ == "__main__":
     for i in range(N_Games):
         if i > 0:
             env = copy.deepcopy(env_backup)
-        last_state = 0  # 上一个时隙在更新表示为0， 1表示上个时隙就是在卸载可以跳过
-        temp_x, temp_edges, temp_network_state, temp_ready_mask, temp_distance_mask, temp_done_mask, temp_off_mask, temp_actions, temp_reward = None, None, None, None, None, None, None, None, None,
-        next_state = 0  # 下一个需要记录的状态来了，0表示没来，1表示来了
+
+        # 用于存储每个epoch中的所有step信息
+        epoch_transitions = {}
+
         score = 0
         done = False
         episode_step = 1
@@ -163,13 +164,33 @@ if __name__ == "__main__":
 
             # 环境 step
             try:
+                before_step_acc= env.print_all_accuracy()
                 reward, x_, edges_, new_network_state, new_ready_mask, new_distance_mask, new_done_mask, new_off_mask = env.step(
                     actions)
             except Exception as e:
                 print(f"Error in environment step: {e}")
                 break
+
             for count in env.tasks:
                 print("delay", count.task_delay)
+
+            # 存储当前step的信息到epoch_transitions
+            transition = (x, edges, network_state, ready_mask, distance_mask, done_mask, off_mask,
+                          actions, reward, x_, edges_, new_network_state, new_ready_mask,
+                          new_distance_mask, new_done_mask, new_off_mask, done, before_step_acc,
+                          env.tasks[0].task_delay, last_5_actions)
+            transition_keys = [
+                "x", "edges", "network_state", "ready_mask", "distance_mask", "done_mask", "off_mask",
+                "actions", "reward", "x_", "edges_", "new_network_state", "new_ready_mask",
+                "new_distance_mask", "new_done_mask", "new_off_mask", "done", "acc", "delay", "decision"
+            ]
+
+            # 将元组转化为字典
+            transition_dict = dict(zip(transition_keys, transition))
+
+            # 示例输出
+            # print(transition_dict)
+            epoch_transitions[episode_step] = transition_dict
             # 结束条件
             if episode_step >= MAX_STEPS or env.tasks[0].task_delay == 0 or env.tasks[0].is_completed:
                 done = True
@@ -187,39 +208,6 @@ if __name__ == "__main__":
                 if env.tasks[0].task_delay == 0 and not env.tasks[0].is_completed:
                     print(f"Task failed in Episode {i + 1}!")
 
-            if np.any(last_5_actions > 0.5):
-                buffer.store_transition(
-                    x, edges, network_state, ready_mask, distance_mask, done_mask, off_mask,
-                    actions, reward, x_, edges_, new_network_state, new_ready_mask, new_distance_mask, new_done_mask,
-                    new_off_mask, done
-                )
-            else:
-                if last_state == 0:  # 上一个时隙还在更新
-                    temp_x, temp_edges, temp_network_state, temp_ready_mask, temp_distance_mask, temp_done_mask, temp_off_mask, temp_actions, temp_reward = x, edges, network_state, ready_mask, distance_mask, done_mask, off_mask, actions, reward
-                    last_state = 1
-                else:
-                    if not np.array_equal(ready_mask, new_ready_mask) or done:
-                        buffer.store_transition(
-                            temp_x, temp_edges, temp_network_state, temp_ready_mask, temp_distance_mask, temp_done_mask,
-                            temp_off_mask, temp_actions, temp_reward, x_, edges_, new_network_state, new_ready_mask,
-                            new_distance_mask, new_done_mask, new_off_mask, done
-                        )
-                        last_state = 0
-
-            # temp_x, temp_edges, temp_network_state, temp_ready_mask, temp_distance_mask, temp_done_mask,temp_off_mask,temp_actions, temp_reward = x, edges, network_state, ready_mask, distance_mask, done_mask, off_mask,
-            # actions, reward
-            # if env.offload_state(last_5_actions): #当前时隙是在卸载
-            #     if last_state == 0 and next_state ==0:
-            #         #表明现在需要进行记录
-            #         temp_x, temp_edges, temp_network_state, temp_ready_mask, temp_distance_mask, temp_done_mask,temp_off_mask,temp_actions, temp_reward = x, edges, network_state, ready_mask, distance_mask, done_mask, off_mask, actions, reward
-            #
-            #
-            # else:
-            #     buffer.store_transition(
-            #         x, edges, network_state, ready_mask, distance_mask, done_mask, off_mask,
-            #         actions, reward, x_, edges_, new_network_state, new_ready_mask, new_distance_mask, new_done_mask, new_off_mask, done
-            #     )
-
             # 学习
             try:
                 critic_loss = DT_place_agent.learn(buffer, total_steps)
@@ -233,6 +221,28 @@ if __name__ == "__main__":
             episode_step += 1
             total_steps += 1
             print(f"Episode {i + 1}, Step {episode_step}, Reward: {reward}, Score: {score}")
+
+        import pickle
+
+        # 将字典存储到 Pickle 文件中
+        with open("data.pkl", "wb") as file:
+            pickle.dump(epoch_transitions, file)
+        # 在每个epoch结束后，transitions存入buffer
+        for transition in epoch_transitions:
+            x, edges, network_state, ready_mask, distance_mask, done_mask, off_mask, actions, reward, x_, edges_, new_network_state, new_ready_mask, new_distance_mask, new_done_mask, new_off_mask, done = transition
+
+            buffer.store_transition(
+                x, edges, network_state, ready_mask, distance_mask, done_mask, off_mask,
+                actions, reward, x_, edges_, new_network_state, new_ready_mask, new_distance_mask, new_done_mask,
+                new_off_mask, done
+            )
+
+        #
+        # # 从 Pickle 文件中读取字典
+        # with open("data.pkl", "rb") as file:
+        #     loaded_data = pickle.load(file)
+
+        print(loaded_data)  # 输出: {'name': 'Alice', 'age': 25, 'city': 'New York'}
         swanlab.log({"Reward": reward, "Score": score}, step=i + 1)
 
         # 保存模型

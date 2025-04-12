@@ -887,7 +887,10 @@ class Env:
                         Dt_id = sub_task.vehicle_id
                         dt = self.dt_set[Dt_id]
                         # 任务没有在卸载
-                        if random.random() < decision:
+                        action_ = np.random.binomial(1, decision)
+                        print(action_, "action")
+
+                        if action_ == 0:
                             # 表示任务结束dt更新
                             sub_task.off_tag = 0  # 卸载标识置0
 
