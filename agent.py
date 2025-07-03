@@ -259,7 +259,7 @@ class Agent:
             self.critic2.optimizer.step()
 
             # === Actor 网络更新（减少更新频率，提高稳定性）===
-            if self.learn_step_counter % 2 == 0:  # 每两步更新一次Actor
+            if self.learn_step_counter % 10 == 0:  # 每两步更新一次Actor
                 # 前向传播生成动作
                 edge_logits, decision_probs = self.actor.forward(states, ready_mask, distance_mask, done_mask, off_mask)
                 # One-hot编码edge动作

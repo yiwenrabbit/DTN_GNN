@@ -309,6 +309,11 @@ class Task:
         return f"Task(task_id={self.task_id}, n_subtasks={self.n_subtasks}, is_completed={self.is_completed})"
 
 
+    def get_remaining_ratio(self):
+        total = sum(st.data_size for st in self.subtasks)
+        remain = sum(st.compute_size for st in self.subtasks)
+        return remain / total if total > 0 else 1.0
+
 # vehicles = [1, 2, 3, 4, 5, 6]
 # task = Task(task_id=1, n_subtasks=6, vehicles=vehicles)
 #

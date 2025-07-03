@@ -120,7 +120,7 @@ if __name__ == "__main__":
     )
 
     ### 游戏开始 ###
-    N_Games = 1000
+    N_Games = 2000
     MAX_STEPS = 200
     total_steps = 0
     best_score = -float('inf')
