@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 max_data_size=60
 min_data_size=30
 com_density = 1e7
-min_delay = 10          #任务最小时延
-max_delay = 15          #任务最大时延
+min_delay = 15          #任务最小时延
+max_delay = 20          #任务最大时延
 
 class SubTask:
     """
@@ -308,6 +308,11 @@ class Task:
     def __repr__(self):
         return f"Task(task_id={self.task_id}, n_subtasks={self.n_subtasks}, is_completed={self.is_completed})"
 
+
+    def get_remaining_ratio(self):
+        total = sum(st.data_size for st in self.subtasks)
+        remain = sum(st.compute_size for st in self.subtasks)
+        return remain / total if total > 0 else 1.0
 
 # vehicles = [1, 2, 3, 4, 5, 6]
 # task = Task(task_id=1, n_subtasks=6, vehicles=vehicles)
