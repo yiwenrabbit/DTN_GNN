@@ -10,18 +10,15 @@ import torch as t
 import copy
 import os
 import matplotlib.pyplot as plt
-import swanlab
+import wandb
 import datetime
 
 current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 
-swanlab.login(api_key="O37YbyiqLiKdFHyc29Xtg")
-# 初始化 swanlab，experiment_name 设置为当前时间
-swanlab.init(
-    key="O37YbyiqLiKdFHyc29Xtg",
-    project="DTN-PPO",  # 改为PPO项目
-    experiment_name=f"{current_time}",  # 使用当前时间作为 experiment_name
-    workspace="yiwenrabbit"
+wandb.login(key="122149ff6074b3fffbfa05229528d9cfa0a6835b")
+wandb.init(
+    project="DTN-PPO",
+    name=f"{current_time}"
 )
 
 
@@ -214,7 +211,9 @@ if __name__ == "__main__":
                 for kp in range(len(task_status)):
                     combined_text += f"Task {kp + 1}: {str(task_status[kp])} \n"
                 combined_text += "\n"
-                swanlab.log({f"epoch {i + 1}": [swanlab.Text(combined_text, caption=f"Epoch {i + 1}")]})
+                wandb.log({
+                    f"Task_Status_Epoch_{i + 1}": combined_text
+                })
 
                 if env.tasks[0].task_delay == 0 and not env.tasks[0].is_completed:
                     print(f"Task failed in Episode {i + 1}!")
@@ -256,13 +255,11 @@ if __name__ == "__main__":
 
             # PPO需要在每个episode后清空buffer
             buffer.clear()
-
-        # 记录到swanlab
-        swanlab.log({
+        wandb.log({
             "Episode_Reward": score,
             "Episode_Steps": episode_step,
             "Average_Reward": score / episode_step,
-            #"Task_Accuracy": processed_accuracy,
+            # "Task_Accuracy": processed_accuracy,
             "Total_Steps": total_steps
         }, step=i + 1)
 
@@ -332,6 +329,4 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.savefig(f'./data/ppo_training_curves_{current_time}.png')
     plt.close()
-
-    # 关闭swanlab
-    swanlab.finish()
+    wandb.finish()
