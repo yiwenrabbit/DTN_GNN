@@ -1,3 +1,4 @@
+# agent.py
 import numpy as np
 import torch as T
 import torch.nn.functional as F
@@ -54,6 +55,18 @@ class PPOAgent:
         # 经验回放计数
         self.learn_step_counter = 0
 
+    def check_and_fix_nan(self, tensor, name="tensor"):
+        """修复NaN值"""
+        if T.isnan(tensor).any():
+            print(f"Warning: NaN detected in {name}")
+            # 将NaN替换为0
+            tensor = T.where(T.isnan(tensor), T.zeros_like(tensor), tensor)
+        if T.isinf(tensor).any():
+            print(f"Warning: Inf detected in {name}")
+            # 将Inf替换为大值
+            tensor = T.clamp(tensor, -1e6, 1e6)
+        return tensor
+
     def choose_action(self, gcn_x, edge_index, network_states, episode, ready_mask, distance_mask, done_mask, off_mask,
                       explore=True):
         try:
@@ -64,6 +77,10 @@ class PPOAgent:
             distance_mask = T.tensor(distance_mask, dtype=T.float).to(self.device)
             done_mask = T.tensor(done_mask, dtype=T.float).to(self.device)
             off_mask = T.tensor(off_mask, dtype=T.float).to(self.device)
+
+            # 检查是否包含NaN
+            gcn_x = self.check_and_fix_nan(gcn_x, "gcn_x")
+            network_states = self.check_and_fix_nan(T.tensor(network_states, dtype=T.float), "network_states")
 
             # 确保 network_states 是 tensor 并且在正确的设备上
             if isinstance(network_states, np.ndarray):
@@ -76,13 +93,6 @@ class PPOAgent:
 
             # === GCN 前向传播 ===
             with T.no_grad():
-                #gcn_output = self.gcn(gcn_x, edge_index)
-
-                # 确保 gcn_output 是二维张量
-                #if gcn_output.dim() > 2:
-                    #gcn_flatten = gcn_output.flatten().unsqueeze(0)
-               # else:
-                    #gcn_flatten = gcn_output.flatten().unsqueeze(0)
                 if gcn_x.dim() == 3:
                     batch_size, num_nodes, _ = gcn_x.shape
                     gcn_flatten = T.ones((batch_size, num_nodes, self.gcn.output_dim), device=gcn_x.device)
@@ -91,11 +101,17 @@ class PPOAgent:
                     gcn_flatten = T.ones((num_nodes, self.gcn.output_dim), device=gcn_x.device)
                 gcn_output = T.ones((1, num_nodes, self.gcn.output_dim), device=self.device)
                 gcn_flatten = gcn_output.view(1, -1)
+
                 # === 拼接 network_states 和 GCN 输出 ===
                 state = T.cat((network_states, gcn_flatten), dim=1)
+                state = self.check_and_fix_nan(state, "state")
 
                 # === Actor 网络前向传播 ===
                 edge_logits, decision_probs = self.actor.forward(state, ready_mask, distance_mask, done_mask, off_mask)
+
+                # 检查Actor输出
+                edge_logits = self.check_and_fix_nan(edge_logits, "edge_logits")
+                decision_probs = self.check_and_fix_nan(decision_probs, "decision_probs")
 
                 # === Edge 动作选择（PPO使用分布采样）===
                 batch_size, n_subtasks, n_edges = edge_logits.size()
@@ -104,13 +120,23 @@ class PPOAgent:
 
                 for i in range(n_subtasks):
                     logits = edge_logits[0, i]
+
+
+                    logits = T.clamp(logits, -10, 10)  # 限制logits范围
+
                     if explore:
                         # 从分布中采样
-
                         probs = F.softmax(logits, dim=0)
+
+                        # 添加小的epsilon避免概率为0
+                        probs = probs + 1e-8
+                        probs = probs / probs.sum()
+
                         if T.isnan(probs).any():
-                            print(f"[ NaN in softmax] logits: {logits}")
-                            import pdb; pdb.set_trace()
+                            print(f"[NaN after softmax] logits: {logits}")
+                            # 如果还是有NaN，使用均匀分布
+                            probs = T.ones_like(logits) / len(logits)
+
                         m = dist.Categorical(probs)
                         action = m.sample()
                         edge_actions.append(action.item())
@@ -120,10 +146,11 @@ class PPOAgent:
                         action = logits.argmax().item()
                         edge_actions.append(action)
                         probs = F.softmax(logits, dim=0)
-                        edge_log_probs.append(T.log(probs[action]))
+                        edge_log_probs.append(T.log(probs[action] + 1e-8))
 
                 # === Decision 动作选择 ===
                 decision_actions = decision_probs * ready_mask * off_mask
+                decision_actions = T.clamp(decision_actions, 0, 1)  # 确保在[0,1]范围内
 
                 # === 计算总的log概率 ===
                 edge_log_probs_tensor = T.stack(edge_log_probs)
@@ -145,6 +172,7 @@ class PPOAgent:
 
                 # 计算价值
                 value = self.critic.forward(state, T.zeros_like(actions))
+                value = self.check_and_fix_nan(value, "value")
 
                 return actions.detach().cpu().numpy(), value.detach().cpu().numpy(), total_log_prob.detach().cpu().numpy()
 
@@ -196,6 +224,8 @@ class PPOAgent:
             rewards = T.tensor(rewards, dtype=T.float).to(device)
             dones = T.tensor(dones, dtype=T.bool).to(device)
 
+            rewards = T.clamp(rewards, -100, 100)
+
             # === 计算旧的log概率和价值 ===
             with T.no_grad():
                 gcn_output = self.gcn(gcn_x, edge_index)
@@ -217,7 +247,8 @@ class PPOAgent:
                     batch_log_probs = []
                     for subtask_idx in range(self.n_subtasks):
                         edge_action = edge_actions[batch_idx, subtask_idx].argmax()
-                        probs = F.softmax(edge_logits[batch_idx, subtask_idx], dim=0)
+                        logits = T.clamp(edge_logits[batch_idx, subtask_idx], -10, 10)
+                        probs = F.softmax(logits, dim=0)
                         batch_log_probs.append(T.log(probs[edge_action] + 1e-8))
                     old_edge_log_probs.append(T.stack(batch_log_probs).sum())
                 old_edge_log_probs = T.stack(old_edge_log_probs)
@@ -260,7 +291,10 @@ class PPOAgent:
                     batch_entropy = []
                     for subtask_idx in range(self.n_subtasks):
                         edge_action = edge_actions[batch_idx, subtask_idx].argmax()
-                        probs = F.softmax(edge_logits[batch_idx, subtask_idx], dim=0)
+                        logits = T.clamp(edge_logits[batch_idx, subtask_idx], -10, 10)
+                        probs = F.softmax(logits, dim=0)
+                        probs = probs + 1e-8
+                        probs = probs / probs.sum()
                         batch_log_probs.append(T.log(probs[edge_action] + 1e-8))
                         batch_entropy.append(-(probs * T.log(probs + 1e-8)).sum())
                     new_edge_log_probs.append(T.stack(batch_log_probs).sum())
@@ -277,6 +311,7 @@ class PPOAgent:
 
                 # === 计算比率和损失 ===
                 ratio = T.exp(new_log_probs - old_log_probs.detach())
+                ratio = T.clamp(ratio, 0.1, 10)  # 防止比率过大
 
                 # Clipped surrogate loss
                 surr1 = ratio * advantages
@@ -288,6 +323,10 @@ class PPOAgent:
 
                 # Total loss
                 loss = policy_loss + self.c1 * value_loss - self.c2 * total_entropy
+
+                if T.isnan(loss):
+                    print(f"Warning: NaN loss get policy_loss: {policy_loss}, value_loss: {value_loss}")
+                    return 0.0
 
                 # 反向传播和优化
                 self.actor.optimizer.zero_grad()
