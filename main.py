@@ -207,10 +207,13 @@ if __name__ == "__main__":
                 all_score.append(score + reward)
                 all_ave_rewards.append(ave_re)
                 task_status = env.print_all_accuracy()
-                table = wandb.Table(columns=["Task", "Status"])
-                for kp, status in enumerate(task_status):
-                    table.add_data(f"Task {kp + 1}", str(status))
-                wandb.log({f"Task_Status_Epoch": table}, step=i + 1)
+                wandb.log({
+                    f"Task_1_status": task_status[0],
+                    f"Task_2_status": task_status[1],
+                    f"Task_3_status": task_status[2],
+                    f"Task_4_status": task_status[3],
+                    f"Task_5_status": task_status[4],
+                }, step=i + 1)
 
                 if env.tasks[0].task_delay == 0 and not env.tasks[0].is_completed:
                     print(f"Task failed in Episode {i + 1}!")
