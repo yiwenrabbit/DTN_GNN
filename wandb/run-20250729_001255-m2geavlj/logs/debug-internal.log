@@ -1,0 +1,15 @@
+{"time":"2025-07-29T00:12:55.325174+08:00","level":"INFO","msg":"stream: starting","core version":"0.19.9","symlink path":"/Users/luosmallrui/Downloads/DTN/wandb/run-20250729_001255-m2geavlj/logs/debug-core.log"}
+{"time":"2025-07-29T00:13:25.636693+08:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": context deadline exceeded"}
+{"time":"2025-07-29T00:13:57.979668+08:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"}
+{"time":"2025-07-29T00:14:03.870273+08:00","level":"INFO","msg":"created new stream","id":"m2geavlj"}
+{"time":"2025-07-29T00:14:03.870642+08:00","level":"INFO","msg":"stream: started","id":"m2geavlj"}
+{"time":"2025-07-29T00:14:03.87086+08:00","level":"INFO","msg":"writer: Do: started","stream_id":"m2geavlj"}
+{"time":"2025-07-29T00:14:03.871034+08:00","level":"INFO","msg":"handler: started","stream_id":"m2geavlj"}
+{"time":"2025-07-29T00:14:03.871067+08:00","level":"INFO","msg":"sender: started","stream_id":"m2geavlj"}
+{"time":"2025-07-29T00:14:04.544037+08:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-07-29T00:14:05.789179+08:00","level":"INFO","msg":"stream: closing","id":"m2geavlj"}
+{"time":"2025-07-29T00:14:05.789236+08:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-07-29T00:14:05.789265+08:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-07-29T00:14:08.020296+08:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-07-29T00:15:19.543245+08:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/files/luosmallrui-university-of-florida/DTN/m2geavlj/file_stream\": dial tcp 35.186.228.49:443: connect: operation timed out"}
+{"time":"2025-07-29T00:16:36.7719+08:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/files/luosmallrui-university-of-florida/DTN/m2geavlj/file_stream\": dial tcp 35.186.228.49:443: connect: operation timed out"}

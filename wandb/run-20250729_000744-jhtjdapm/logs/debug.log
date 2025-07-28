@@ -1,0 +1,69 @@
+2025-07-29 00:07:44,245 INFO    MainThread:20783 [wandb_setup.py:_flush():67] Current SDK version is 0.19.9
+2025-07-29 00:07:44,245 INFO    MainThread:20783 [wandb_setup.py:_flush():67] Configure stats pid to 20783
+2025-07-29 00:07:44,245 INFO    MainThread:20783 [wandb_setup.py:_flush():67] Loading settings from /Users/luosmallrui/.config/wandb/settings
+2025-07-29 00:07:44,245 INFO    MainThread:20783 [wandb_setup.py:_flush():67] Loading settings from /Users/luosmallrui/Downloads/DTN/wandb/settings
+2025-07-29 00:07:44,245 INFO    MainThread:20783 [wandb_setup.py:_flush():67] Loading settings from environment variables
+2025-07-29 00:07:44,245 INFO    MainThread:20783 [wandb_init.py:setup_run_log_directory():662] Logging user logs to /Users/luosmallrui/Downloads/DTN/wandb/run-20250729_000744-jhtjdapm/logs/debug.log
+2025-07-29 00:07:44,245 INFO    MainThread:20783 [wandb_init.py:setup_run_log_directory():663] Logging internal logs to /Users/luosmallrui/Downloads/DTN/wandb/run-20250729_000744-jhtjdapm/logs/debug-internal.log
+2025-07-29 00:07:44,245 INFO    MainThread:20783 [wandb_init.py:init():781] calling init triggers
+2025-07-29 00:07:44,245 INFO    MainThread:20783 [wandb_init.py:init():786] wandb.init called with sweep_config: {}
+config: {'_wandb': {}}
+2025-07-29 00:07:44,245 INFO    MainThread:20783 [wandb_init.py:init():809] starting backend
+2025-07-29 00:07:44,245 INFO    MainThread:20783 [wandb_init.py:init():813] sending inform_init request
+2025-07-29 00:07:44,275 INFO    MainThread:20783 [backend.py:_multiprocessing_setup():101] multiprocessing start_methods=spawn,fork,forkserver, using: spawn
+2025-07-29 00:07:44,275 INFO    MainThread:20783 [wandb_init.py:init():823] backend started and connected
+2025-07-29 00:07:44,279 INFO    MainThread:20783 [wandb_init.py:init():915] updated telemetry
+2025-07-29 00:07:44,289 INFO    MainThread:20783 [wandb_init.py:init():939] communicating run to backend with 90.0 second timeout
+2025-07-29 00:07:59,230 INFO    Thread-4  :20783 [retry.py:__call__():175] [no run ID] Retry attempt failed:
+Traceback (most recent call last):
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/urllib3/connectionpool.py", line 713, in urlopen
+    self._prepare_proxy(conn)
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/urllib3/connectionpool.py", line 1015, in _prepare_proxy
+    conn.connect()
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/urllib3/connection.py", line 419, in connect
+    self.sock = ssl_wrap_socket(
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/urllib3/util/ssl_.py", line 458, in ssl_wrap_socket
+    ssl_sock = _ssl_wrap_socket_impl(
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/urllib3/util/ssl_.py", line 502, in _ssl_wrap_socket_impl
+    return ssl_context.wrap_socket(sock, server_hostname=server_hostname)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/ssl.py", line 500, in wrap_socket
+    return self.sslsocket_class._create(
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/ssl.py", line 1040, in _create
+    self.do_handshake()
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/ssl.py", line 1309, in do_handshake
+    self._sslobj.do_handshake()
+socket.timeout: _ssl.c:1112: The handshake operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/requests/adapters.py", line 667, in send
+    resp = conn.urlopen(
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/urllib3/connectionpool.py", line 802, in urlopen
+    retries = retries.increment(
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/urllib3/util/retry.py", line 594, in increment
+    raise MaxRetryError(_pool, url, error or ResponseError(cause))
+urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='api.wandb.ai', port=443): Max retries exceeded with url: /graphql (Caused by ProxyError('Cannot connect to proxy.', timeout('_ssl.c:1112: The handshake operation timed out')))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/wandb/sdk/lib/retry.py", line 134, in __call__
+    result = self._call_fn(*args, **kwargs)
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/wandb/sdk/internal/internal_api.py", line 402, in execute
+    return self.client.execute(*args, **kwargs)  # type: ignore
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/wandb/vendor/gql-0.2.0/wandb_gql/client.py", line 52, in execute
+    result = self._get_result(document, *args, **kwargs)
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/wandb/vendor/gql-0.2.0/wandb_gql/client.py", line 60, in _get_result
+    return self.transport.execute(document, *args, **kwargs)
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/wandb/sdk/lib/gql_request.py", line 58, in execute
+    request = self.session.post(self.url, **post_args)
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/requests/sessions.py", line 637, in post
+    return self.request("POST", url, data=data, json=json, **kwargs)
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/requests/sessions.py", line 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwargs)
+  File "/Users/luosmallrui/Library/Python/3.9/lib/python/site-packages/requests/adapters.py", line 694, in send
+    raise ProxyError(e, request=request)
+requests.exceptions.ProxyError: HTTPSConnectionPool(host='api.wandb.ai', port=443): Max retries exceeded with url: /graphql (Caused by ProxyError('Cannot connect to proxy.', timeout('_ssl.c:1112: The handshake operation timed out')))
