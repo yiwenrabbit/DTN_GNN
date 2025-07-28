@@ -207,12 +207,10 @@ if __name__ == "__main__":
                 all_score.append(score + reward)
                 all_ave_rewards.append(ave_re)
                 task_status = env.print_all_accuracy()
-                with open("task_status_log.txt", "w", encoding="utf-8") as f:
-                    for kp, status in enumerate(task_status):
-                        f.write(f"Task {kp + 1}: {status}\n")
-                artifact = wandb.Artifact(f"task_status_epoch_{i + 1}", type="log")
-                artifact.add_file("task_status_log.txt")
-                wandb.log_artifact(artifact)
+                table = wandb.Table(columns=["Task", "Status"])
+                for kp, status in enumerate(task_status):
+                    table.add_data(f"Task {kp + 1}", str(status))
+                wandb.log({f"Task_Status_Epoch": table}, step=i + 1)
 
                 if env.tasks[0].task_delay == 0 and not env.tasks[0].is_completed:
                     print(f"Task failed in Episode {i + 1}!")
