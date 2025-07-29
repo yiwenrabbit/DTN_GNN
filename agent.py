@@ -216,8 +216,11 @@ class PPOAgent:
                 edge_logits, decision_probs = self.actor.forward(states, ready_mask, distance_mask, done_mask, off_mask)
 
                 # 分解动作
-                edge_actions = actions[:, :self.n_subtasks * self.n_edges].view(-1, self.n_subtasks, self.n_edges)
-                decision_actions = actions[:, self.n_subtasks * self.n_edges:]
+                edge_actions = actions[:, :self.n_subtasks * self.n_edges].view(-1, self.n_subtasks, self.n_edges).to(self.device)
+                #edge_actions = actions[:, :self.n_subtasks * self.n_edges].view(-1, self.n_subtasks, self.n_edges)
+                #decision_actions = actions[:, self.n_subtasks * self.n_edges:]
+                decision_actions = actions[:, self.n_subtasks * self.n_edges:].to(self.device)
+
 
                 # 计算edge动作的log概率
                 old_edge_log_probs = []
