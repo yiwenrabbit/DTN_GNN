@@ -232,7 +232,10 @@ class PPOAgent:
                 old_edge_log_probs = T.stack(old_edge_log_probs)
 
                 # 计算决策动作的log概率
-                decision_dist = dist.Beta(2.0, 2.0)
+                #decision_dist = dist.Beta(2.0, 2.0)
+                decision_dist = dist.Beta(T.tensor(2.0, device=decision_actions.device),
+                                          T.tensor(2.0, device=decision_actions.device))
+
                 old_decision_log_probs = decision_dist.log_prob(decision_actions.clamp(1e-8, 1 - 1e-8)).sum(dim=1)
 
                 old_log_probs = old_edge_log_probs + old_decision_log_probs
@@ -280,7 +283,9 @@ class PPOAgent:
                 new_edge_log_probs = T.stack(new_edge_log_probs)
                 edge_entropy = T.stack(edge_entropy).mean()
 
-                decision_dist = dist.Beta(2.0, 2.0)
+                #decision_dist = dist.Beta(2.0, 2.0)
+                decision_dist = dist.Beta(T.tensor(2.0, device=decision_actions.device),
+                                          T.tensor(2.0, device=decision_actions.device))
                 new_decision_log_probs = decision_dist.log_prob(decision_actions.clamp(1e-8, 1 - 1e-8)).sum(dim=1)
                 decision_entropy = decision_dist.entropy().mean()
 
