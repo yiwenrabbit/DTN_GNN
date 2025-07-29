@@ -86,15 +86,7 @@ class PPOAgent:
             done_mask = to_device(done_mask)
             off_mask = to_device(off_mask)
             network_states = to_device(network_states)
-            print("----------------------")
-            print(gcn_x.device)
-            print(edge_index.device)
-            print(ready_mask.device)
-            print(distance_mask.device)
-            print(done_mask.device)
-            print(off_mask.device)
-            print(network_states.device)
-            print("----------------------")
+
             # === 检查维度并扩展 ===
             if network_states.dim() == 1:
                 network_states = network_states.unsqueeze(0)
@@ -139,18 +131,22 @@ class PPOAgent:
 
             # === Decision 动作选择 ===
             decision_actions = decision_probs * ready_mask * off_mask
-            decision_actions = T.clamp(decision_actions, 1e-8, 1 - 1e-8).to(device)
-            decision_dist = dist.Beta(2.0, 2.0).to(device)
-            decision_log_probs = decision_dist.log_prob(decision_actions).to(device)
+            decision_actions = T.clamp(decision_actions, 1e-8, 1 - 1e-8)  # Already on device
+
+            # Create Beta distribution with parameters on the correct device
+            alpha = T.tensor(2.0, device=device)
+            beta = T.tensor(2.0, device=device)
+            decision_dist = dist.Beta(alpha, beta)
+            decision_log_probs = decision_dist.log_prob(decision_actions)
 
             # === 拼接动作向量 ===
             edge_actions_tensor = T.tensor(edge_actions, dtype=T.long, device=device)
             edge_one_hot = F.one_hot(edge_actions_tensor, num_classes=n_edges).float()
-            edge_flatten = edge_one_hot.view(1, -1).to(device)
+            edge_flatten = edge_one_hot.view(1, -1)  # Already on device, no need for .to(device)
             actions = T.cat([edge_flatten, decision_actions], dim=1)
 
             # === Critic 价值估计 ===
-            value = self.critic.forward(state, T.zeros_like(actions))
+            value = self.critic.forward(state, T.zeros_like(actions, device=actions.device))
 
             # === 返回值 ===
             total_log_prob = T.stack(edge_log_probs).sum() + decision_log_probs.sum()
