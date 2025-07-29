@@ -67,117 +67,88 @@ class PPOAgent:
             tensor = T.clamp(tensor, -1e6, 1e6)
         return tensor
 
-    def choose_action(self, gcn_x, edge_index, network_states, episode, ready_mask, distance_mask, done_mask, off_mask,
-                      explore=True):
+    def choose_action(self, gcn_x, edge_index, network_states, episode,
+                      ready_mask, distance_mask, done_mask, off_mask, explore=True):
         try:
-            # 确保所有输入都移动到相同的设备上
-            gcn_x = T.tensor(gcn_x, dtype=T.float).to(self.device)
-            edge_index = T.tensor(edge_index, dtype=T.long).to(self.device)
-            ready_mask = T.tensor(ready_mask, dtype=T.float).to(self.device)
-            distance_mask = T.tensor(distance_mask, dtype=T.float).to(self.device)
-            done_mask = T.tensor(done_mask, dtype=T.float).to(self.device)
-            off_mask = T.tensor(off_mask, dtype=T.float).to(self.device)
+            device = self.device
 
-            # 检查是否包含NaN
-            gcn_x = self.check_and_fix_nan(gcn_x, "gcn_x")
-            network_states = self.check_and_fix_nan(T.tensor(network_states, dtype=T.float), "network_states")
+            def to_device(t, dtype=T.float):
+                if isinstance(t, np.ndarray):
+                    t = T.tensor(t, dtype=dtype)
+                return t.to(device)
 
-            # 确保 network_states 是 tensor 并且在正确的设备上
-            if isinstance(network_states, np.ndarray):
-                network_states = T.tensor(network_states, dtype=T.float)
-            network_states = network_states.clone().detach().to(self.device)
+            gcn_x = to_device(gcn_x)
+            edge_index = to_device(edge_index, dtype=T.long)
+            ready_mask = to_device(ready_mask)
+            distance_mask = to_device(distance_mask)
+            done_mask = to_device(done_mask)
+            off_mask = to_device(off_mask)
+            network_states = to_device(network_states)
 
-            # 确保 network_states 是二维张量
+            # === 检查维度并扩展 ===
             if network_states.dim() == 1:
                 network_states = network_states.unsqueeze(0)
 
-            # === GCN 前向传播 ===
-            with T.no_grad():
-                if gcn_x.dim() == 3:
-                    batch_size, num_nodes, _ = gcn_x.shape
-                    gcn_flatten = T.ones((batch_size, num_nodes, self.gcn.output_dim), device=gcn_x.device)
+            if gcn_x.dim() == 3:
+                batch_size, num_nodes, _ = gcn_x.shape
+            else:
+                num_nodes = gcn_x.shape[0]
+                batch_size = 1
+            gcn_output = T.ones((batch_size, num_nodes, self.gcn.output_dim), device=device)
+            gcn_flatten = gcn_output.view(batch_size, -1)
+
+            # === 拼接完整状态向量 ===
+            state = T.cat((network_states, gcn_flatten), dim=1)
+
+            # === Actor前向传播 ===
+            edge_logits, decision_probs = self.actor.forward(state, ready_mask, distance_mask, done_mask, off_mask)
+
+            # === Edge 动作选择 ===
+            batch_size, n_subtasks, n_edges = edge_logits.size()
+            edge_actions = []
+            edge_log_probs = []
+
+            for i in range(n_subtasks):
+                logits = edge_logits[0, i]
+                logits = T.clamp(logits, -10, 10)
+                probs = F.softmax(logits, dim=0)
+
+                if T.isnan(probs).any():
+                    probs = T.ones_like(probs) / len(probs)
+
+                if explore:
+                    m = dist.Categorical(probs)
+                    action = m.sample()
+                    log_prob = m.log_prob(action)
                 else:
-                    num_nodes = gcn_x.shape[0]
-                    gcn_flatten = T.ones((num_nodes, self.gcn.output_dim), device=gcn_x.device)
-                gcn_output = T.ones((1, num_nodes, self.gcn.output_dim), device=self.device)
-                gcn_flatten = gcn_output.view(1, -1)
+                    action = T.argmax(probs)
+                    log_prob = T.log(probs[action] + 1e-8)
 
-                # === 拼接 network_states 和 GCN 输出 ===
-                state = T.cat((network_states, gcn_flatten), dim=1)
-                state = self.check_and_fix_nan(state, "state")
+                edge_actions.append(action.item())
+                edge_log_probs.append(log_prob)
 
-                # === Actor 网络前向传播 ===
-                edge_logits, decision_probs = self.actor.forward(state, ready_mask, distance_mask, done_mask, off_mask)
+            # === Decision 动作选择 ===
+            decision_actions = decision_probs * ready_mask * off_mask
+            decision_actions = T.clamp(decision_actions, 1e-8, 1 - 1e-8)
+            decision_dist = dist.Beta(2.0, 2.0)
+            decision_log_probs = decision_dist.log_prob(decision_actions)
 
-                # 检查Actor输出
-                edge_logits = self.check_and_fix_nan(edge_logits, "edge_logits")
-                decision_probs = self.check_and_fix_nan(decision_probs, "decision_probs")
+            # === 拼接动作向量 ===
+            edge_actions_tensor = T.tensor(edge_actions, dtype=T.long, device=device)
+            edge_one_hot = F.one_hot(edge_actions_tensor, num_classes=n_edges).float()
+            edge_flatten = edge_one_hot.view(1, -1)
+            actions = T.cat([edge_flatten, decision_actions], dim=1)
 
-                # === Edge 动作选择（PPO使用分布采样）===
-                batch_size, n_subtasks, n_edges = edge_logits.size()
-                edge_actions = []
-                edge_log_probs = []
+            # === Critic 价值估计 ===
+            value = self.critic.forward(state, T.zeros_like(actions))
 
-                for i in range(n_subtasks):
-                    logits = edge_logits[0, i]
+            # === 返回值 ===
+            total_log_prob = T.stack(edge_log_probs).sum() + decision_log_probs.sum()
 
-
-                    logits = T.clamp(logits, -10, 10)  # 限制logits范围
-
-                    if explore:
-                        # 从分布中采样
-                        probs = F.softmax(logits, dim=0)
-
-                        # 添加小的epsilon避免概率为0
-                        probs = probs + 1e-8
-                        probs = probs / probs.sum()
-
-                        if T.isnan(probs).any():
-                            print(f"[NaN after softmax] logits: {logits}")
-                            # 如果还是有NaN，使用均匀分布
-                            probs = T.ones_like(logits) / len(logits)
-
-                        m = dist.Categorical(probs)
-                        action = m.sample()
-                        edge_actions.append(action.item())
-                        edge_log_probs.append(m.log_prob(action))
-                    else:
-                        # 选择最优动作
-                        action = logits.argmax().item()
-                        edge_actions.append(action)
-                        probs = F.softmax(logits, dim=0)
-                        edge_log_probs.append(T.log(probs[action] + 1e-8))
-
-                # === Decision 动作选择 ===
-                decision_actions = decision_probs * ready_mask * off_mask
-                decision_actions = T.clamp(decision_actions, 0, 1)  # 确保在[0,1]范围内
-
-                # === 计算总的log概率 ===
-                edge_log_probs_tensor = T.stack(edge_log_probs)
-
-                # 对于决策动作，使用Beta分布
-                decision_dist = dist.Beta(2.0, 2.0)
-                decision_log_probs = decision_dist.log_prob(decision_actions.clamp(1e-8, 1 - 1e-8))
-
-                total_log_prob = edge_log_probs_tensor.sum() + decision_log_probs.sum()
-
-                # === 拼接完整动作 ===
-                edge_actions_tensor = T.tensor(edge_actions, dtype=T.long).to(self.device)
-                edge_probs_flatten = F.one_hot(edge_actions_tensor, num_classes=n_edges).float()
-                if edge_probs_flatten.dim() == 2:
-                    edge_probs_flatten = edge_probs_flatten.unsqueeze(0)
-
-                edge_probs_flatten_view = edge_probs_flatten.view(1, -1)
-                actions = T.cat([edge_probs_flatten_view, decision_actions], dim=1)
-
-                # 计算价值
-                value = self.critic.forward(state, T.zeros_like(actions))
-                value = self.check_and_fix_nan(value, "value")
-
-                return actions.detach().cpu().numpy(), value.detach().cpu().numpy(), total_log_prob.detach().cpu().numpy()
+            return actions.detach().cpu().numpy(), value.detach().cpu().numpy(), total_log_prob.detach().cpu().numpy()
 
         except Exception as e:
-            print(f"Error in choosing action: {e}")
+            print(f"[Choose Action Error] {e}")
             raise
 
     def compute_gae(self, rewards, values, dones, next_values):
