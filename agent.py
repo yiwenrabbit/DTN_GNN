@@ -73,7 +73,9 @@ class PPOAgent:
             device = self.device
 
             def to_device(t, dtype=T.float):
-                if isinstance(t, np.ndarray):
+                if isinstance(t, list):
+                    t = T.tensor(t, dtype=dtype)
+                elif isinstance(t, np.ndarray):
                     t = T.tensor(t, dtype=dtype)
                 return t.to(device)
 
