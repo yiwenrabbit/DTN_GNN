@@ -109,6 +109,8 @@ class Env:
         self.subtask_accuracy_dict = {}
         self.last_update_step = {}  # {subtask_id: step}
         self.current_step = 0       # 当前的 step index
+        self.subtask_accuracy_dict = {}        # 子任务精度
+        self.last_update_step = {}             # 子任务最后更新时间步
 
 
         if load_from_file:
@@ -906,6 +908,7 @@ class Env:
 
                             finish_reward += (accuracy - 0.5) * step_reward_factor  # 根据精度给予奖励
                             self.last_update_step[sub_task.subtask_id] = self.current_step
+                            self.subtask_accuracy_dict[sub_task.subtask_id] = accuracy
                         else:
                             # 表示任务继续更新dt
                             vec_dt_id = sub_task.vehicle_id
@@ -934,6 +937,9 @@ class Env:
                                 #finish_reward += (accuracy - 0.8) * step_reward_factor  # 根据精度给予奖励
                                 reward_bonus = (accuracy - 0.5) * 4
                                 finish_reward += reward_bonus * step_reward_factor
+                                self.last_update_step[sub_task.subtask_id] = self.current_step
+                            else:
+                                # ❗️即使还没完成，也记录下当前更新时间
                                 self.last_update_step[sub_task.subtask_id] = self.current_step
 
 
@@ -967,9 +973,7 @@ class Env:
 
         # 更新DAG图,并且将可以处理的任务的ready置1
         status = self.tasks[0].update_task_status()
-        for subtask in self.tasks[0].subtasks:
-            if subtask.is_done and subtask.task_id not in self.subtask_accuracy_dict:
-                self.subtask_accuracy_dict[subtask.task_id] = subtask.precision
+
         if status:
             print(f"Accuracy: {self.return_dt_accuracy()}")
 
