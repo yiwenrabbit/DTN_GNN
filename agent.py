@@ -131,8 +131,9 @@ class PPOAgent:
                 edge_log_probs.append(log_prob)
 
             # === Decision 动作选择 ===
-            decision_actions = decision_probs * ready_mask * off_mask
-            decision_actions = T.clamp(decision_actions, 1e-8, 1 - 1e-8)  # Already on device
+            decision_actions = (decision_probs * ready_mask * off_mask).clamp(1e-6, 1 - 1e-6)
+            # decision_actions = decision_probs * ready_mask * off_mask
+            # decision_actions = T.clamp(decision_actions, 1e-8, 1 - 1e-8)  # Already on device
 
             # Create Beta distribution with parameters on the correct device
             alpha = T.tensor(2.0, device=device)
@@ -225,7 +226,9 @@ class PPOAgent:
                 edge_actions = actions[:, :self.n_subtasks * self.n_edges].view(-1, self.n_subtasks, self.n_edges).to(self.device)
                 #edge_actions = actions[:, :self.n_subtasks * self.n_edges].view(-1, self.n_subtasks, self.n_edges)
                 #decision_actions = actions[:, self.n_subtasks * self.n_edges:]
-                decision_actions = actions[:, self.n_subtasks * self.n_edges:].to(self.device)
+                # decision_actions = actions[:, self.n_subtasks * self.n_edges:].to(self.device)
+                decision_actions = actions[:, self.n_subtasks * self.n_edges:].clamp(1e-6, 1 - 1e-6).to(self.device)
+
 
 
                 # 计算edge动作的log概率
@@ -295,7 +298,9 @@ class PPOAgent:
                 #decision_dist = dist.Beta(2.0, 2.0)
                 decision_dist = dist.Beta(T.tensor(2.0, device=decision_actions.device),
                                           T.tensor(2.0, device=decision_actions.device))
-                new_decision_log_probs = decision_dist.log_prob(decision_actions.clamp(1e-8, 1 - 1e-8)).sum(dim=1)
+                # new_decision_log_probs = decision_dist.log_prob(decision_actions.clamp(1e-8, 1 - 1e-8)).sum(dim=1)
+                safe_decision_actions = decision_actions.clamp(1e-6, 1 - 1e-6)
+                new_decision_log_probs = decision_dist.log_prob(safe_decision_actions).sum(dim=1)
                 decision_entropy = decision_dist.entropy().mean()
 
                 new_log_probs = new_edge_log_probs + new_decision_log_probs
