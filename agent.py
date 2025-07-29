@@ -96,7 +96,8 @@ class PPOAgent:
             else:
                 num_nodes = gcn_x.shape[0]
                 batch_size = 1
-            gcn_output = T.ones((batch_size, num_nodes, self.gcn.output_dim), device=device)
+            #gcn_output = T.ones((batch_size, num_nodes, self.gcn.output_dim), device=device)
+            gcn_output = self.gcn(gcn_x, edge_index)
             gcn_flatten = gcn_output.view(batch_size, -1)
 
             # === 拼接完整状态向量 ===
