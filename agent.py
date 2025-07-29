@@ -139,14 +139,14 @@ class PPOAgent:
 
             # === Decision 动作选择 ===
             decision_actions = decision_probs * ready_mask * off_mask
-            decision_actions = T.clamp(decision_actions, 1e-8, 1 - 1e-8)
-            decision_dist = dist.Beta(2.0, 2.0)
-            decision_log_probs = decision_dist.log_prob(decision_actions)
+            decision_actions = T.clamp(decision_actions, 1e-8, 1 - 1e-8).to(device)
+            decision_dist = dist.Beta(2.0, 2.0).to(device)
+            decision_log_probs = decision_dist.log_prob(decision_actions).to(device)
 
             # === 拼接动作向量 ===
             edge_actions_tensor = T.tensor(edge_actions, dtype=T.long, device=device)
             edge_one_hot = F.one_hot(edge_actions_tensor, num_classes=n_edges).float()
-            edge_flatten = edge_one_hot.view(1, -1)
+            edge_flatten = edge_one_hot.view(1, -1).to(device)
             actions = T.cat([edge_flatten, decision_actions], dim=1)
 
             # === Critic 价值估计 ===
