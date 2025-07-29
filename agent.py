@@ -86,7 +86,15 @@ class PPOAgent:
             done_mask = to_device(done_mask)
             off_mask = to_device(off_mask)
             network_states = to_device(network_states)
-
+            print("----------------------")
+            print(gcn_x.device)
+            print(edge_index.device)
+            print(ready_mask.device)
+            print(distance_mask.device)
+            print(done_mask.device)
+            print(off_mask.device)
+            print(network_states.device)
+            print("----------------------")
             # === 检查维度并扩展 ===
             if network_states.dim() == 1:
                 network_states = network_states.unsqueeze(0)
