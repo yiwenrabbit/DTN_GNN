@@ -217,6 +217,7 @@ if __name__ == "__main__":
 
                 if env.tasks[0].task_delay == 0 and not env.tasks[0].is_completed:
                     print(f"Task failed in Episode {i + 1}!")
+                env.apply_precision_gap_penalty(buffer)
 
             # PPO存储转换 - 存储所有经验
             if np.any(last_5_actions > 0.5):

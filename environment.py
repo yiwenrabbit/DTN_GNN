@@ -53,7 +53,7 @@ w2 = 0.5  # 时延权重
 
 step_reward_factor = 10
 
-UPDATE_REWARD_SCALE = 0.1  # 建议从 0.05 开始测试，逐步调大
+UPDATE_REWARD_SCALE = 0.2  # 建议从 0.05 开始测试，逐步调大
 
 # =========mask 说明=======#
 # ready_mask 1:任务现在可以处理， 0:任务还不能处理
@@ -106,6 +106,10 @@ class Env:
         self.edge_file_name = edge_file_name
         self.grid_points, self.horizontal_lines, self.vertical_lines = self.generate_grid()
         self.dt_set = self.init_dt()
+        self.subtask_accuracy_dict = {}
+        self.last_update_step = {}  # {subtask_id: step}
+        self.current_step = 0       # 当前的 step index
+
 
         if load_from_file:
             self.vehicles = self.load_vehicle_positions()
@@ -901,6 +905,7 @@ class Env:
                             sub_task.compute_size_accu(accuracy)  # 根据DT的更新量决定卸载任务数据量
 
                             finish_reward += (accuracy - 0.5) * step_reward_factor  # 根据精度给予奖励
+                            self.last_update_step[sub_task.subtask_id] = self.current_step
                         else:
                             # 表示任务继续更新dt
                             vec_dt_id = sub_task.vehicle_id
@@ -929,75 +934,12 @@ class Env:
                                 #finish_reward += (accuracy - 0.8) * step_reward_factor  # 根据精度给予奖励
                                 reward_bonus = (accuracy - 0.5) * 4
                                 finish_reward += reward_bonus * step_reward_factor
+                                self.last_update_step[sub_task.subtask_id] = self.current_step
 
 
 
         # 返回该时隙可以卸载的任务
         return offload_subtasks, update_size, finish_reward
-
-    #############step函数######################
-    def step(self, DT_actions, new_action=False):
-        reward = 0
-        edge_selection, completion_rates = self.process_actions(DT_actions)
-
-        # 需要做卸载决策的子任务集合
-        offload_subtasks, update_size, finish_reward = self.dt_update_after_actions(edge_selection, completion_rates)
-
-        if offload_subtasks:
-            offloaded_size = self.allocate_resources(offload_subtasks)
-        else:
-            offloaded_size = 0
-
-        # reward += update_size + finish_reward
-
-        reward += UPDATE_REWARD_SCALE * update_size + finish_reward
-
-        # 更新剩余时间
-        self.task_delay_update()
-
-        # 更新车辆位置
-        self.move_vehicles()
-
-        # 更新DAG图,并且将可以处理的任务的ready置1
-        status = self.tasks[0].update_task_status()
-        if status:
-            print(f"Accuracy: {self.return_dt_accuracy()}")
-
-        _ = self.tasks[0].get_ready_subtasks()
-
-        # 时延约束到达，或者任务提前完成
-        # if self.tasks[0].task_delay == 0 and self.tasks[0].is_completed == False:
-        #     if reward > 0:
-        #         reward += time_over_due
-        if self.tasks[0].task_delay == 0 and self.tasks[0].is_completed == False:
-        # 超时但未完成任务，给予惩罚
-            remaining_ratio = self.tasks[0].get_remaining_ratio()
-
-            penalty_weight = 1.2          # 惩罚放大系数
-            penalty_exponent = 1.5        # 非线性放大
-            overtime_penalty = -time_over_due * penalty_weight * (remaining_ratio ** penalty_exponent)
-
-            reward += overtime_penalty
-
-
-        else:
-            if self.tasks[0].task_delay >= 0 and self.tasks[0].is_completed == True:
-                # 最小精度和平均精度
-                min_accuracy, ave_accuracy = self.return_dt_accuracy()
-                delay = self.tasks[0].task_delay / self.tasks[0].original_delay
-                final_reward = w1 * ave_accuracy + w2 * (1 - delay)
-                #reward += final_reward * task_finish
-                min_acc_penalty = (min_accuracy - 0.5) * 6
-
-                reward += final_reward * task_finish + min_acc_penalty
-                print(f"[Reward Debug] update_size={UPDATE_REWARD_SCALE * update_size:.2f}, "
-                      f"finish_reward={finish_reward:.2f}, "
-                      f"final_reward={final_reward * task_finish:.2f}, "
-                      f"min_acc_penalty={min_acc_penalty:.2f}, "
-                      f"TOTAL={reward:.2f}")
-        x, edges = self.get_gcn_inputs()
-        network_states = self.get_network_state()
-        ready, edge, done_mask, off_mask = self.generate_masks()
 
 
         #############step函数######################
@@ -1025,6 +967,9 @@ class Env:
 
         # 更新DAG图,并且将可以处理的任务的ready置1
         status = self.tasks[0].update_task_status()
+        for subtask in self.tasks[0].subtasks:
+            if subtask.is_done and subtask.task_id not in self.subtask_accuracy_dict:
+                self.subtask_accuracy_dict[subtask.task_id] = subtask.precision
         if status:
             print(f"Accuracy: {self.return_dt_accuracy()}")
 
@@ -1072,9 +1017,35 @@ class Env:
         print(f"  final_reward={locals().get('final_reward', 0):.4f}")
         print(f"  min_acc_penalty={locals().get('min_acc_penalty', 0):.4f}")
 
+        self.current_step += 1
+
 
 
         return reward, x, edges, network_states, ready, edge, done_mask, off_mask
+
+    def apply_precision_gap_penalty(self, buffer, penalty_coeff=10.0):
+        """
+        在 episode 结束时，对低于平均精度的子任务所处时间步施加负向奖励惩罚
+        参数:
+            buffer: 存储每一步 reward 的经验池（例如 ReplayBuffer）
+            penalty_coeff: 精度差惩罚的缩放因子
+        """
+        if len(self.subtask_accuracy_dict) == 0:
+            return  # 无任务完成，不惩罚
+
+        avg_precision = sum(self.subtask_accuracy_dict.values()) / len(self.subtask_accuracy_dict)
+
+        for subtask_id, prec in self.subtask_accuracy_dict.items():
+            if prec < avg_precision and subtask_id in self.last_update_step:
+                gap = avg_precision - prec
+                step_idx = self.last_update_step[subtask_id]
+
+                # 如果经验池还未存储到这个步数，跳过
+                if step_idx < len(buffer.reward_memory):
+                    buffer.reward_memory[step_idx] -= penalty_coeff * gap
+                    print(f"[Penalty Applied] subtask_id={subtask_id}, step={step_idx}, "
+                          f"gap={gap:.4f}, penalty={penalty_coeff * gap:.4f}")
+
 
 
     def return_dt_accuracy(self):

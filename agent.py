@@ -199,10 +199,16 @@ class PPOAgent:
             done_mask = T.tensor(done_mask, dtype=T.float).to(device)
             off_mask = T.tensor(off_mask, dtype=T.float).to(device)
             actions = T.tensor(actions, dtype=T.float).to(device)
+            # dones = T.tensor(dones, dtype=T.bool).to(device)
+            # rewards = T.clamp(rewards, -100, 100)
             rewards = T.tensor(rewards, dtype=T.float).to(device)
             dones = T.tensor(dones, dtype=T.bool).to(device)
 
-            rewards = T.clamp(rewards, -100, 100)
+            # 归一化 reward（zero mean, unit std）
+            rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
+
+            # 可选：裁剪防止极端值
+            rewards = T.clamp(rewards, -5, 5)
 
             # === 计算旧的log概率和价值 ===
             with T.no_grad():
