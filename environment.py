@@ -921,9 +921,12 @@ class Env:
                             # 3.更改dt状态，如果已经达到要求
                             trans_rate = Comm.trans_rate(vec_loc, edge_loc, tran_power)
                             update_dt_size = trans_rate * time_slot
-                            ratio = dt.dt_update(update_dt_size)
-                            # 更新并返回一个更新百分比的值
-                            update_size += ratio - time_slot * self.task_spread_factor[sub_task.subtask_id]
+                            update_ratio = dt.dt_update(update_dt_size)
+                            update_size += update_ratio
+
+                            # 💾 更新记录
+
+                            #update_size += ratio - time_slot * self.task_spread_factor[sub_task.subtask_id]
                             print(f"[DT Update Debug] subtask={sub_task.subtask_id}, ratio={ratio:.6f}, "
                                   f"update_size_contrib={ratio - time_slot * self.task_spread_factor[sub_task.subtask_id]:.6f}, "
                                   f"update_size_total={update_size:.6f}")

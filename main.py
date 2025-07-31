@@ -120,7 +120,7 @@ if __name__ == "__main__":
         actor_dims=state_dim, critic_dims=state_dim, gcn_input_dim=Gcn_input_dim,
         gcn_hidden_dim=Gcn_hidden_dim, gcn_output_dim=Gcn_output_dim, n_actions=n_actions,
         agent_idx=0, n_subtasks=subtask_num, n_edges=edge_num,
-        chkpt_dir='./tmp/ppo/', alpha=0.0003, beta=0.0003, fc1=256, fc2=128, fc3=64,
+        chkpt_dir='./tmp/', alpha=0.0003, beta=0.0003, fc1=256, fc2=128, fc3=64,
         gamma=0.99, gae_lambda=0.95, policy_clip=0.2, c1=0.5, c2=0.01, epochs=10
     )
 
