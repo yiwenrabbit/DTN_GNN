@@ -857,6 +857,7 @@ class Env:
     def dt_update_after_actions(self, edge_selection, decision_probs):
 
         update_size = 0
+        ratio = 0.0
         #finish_reward = 0
         # 首先将所有DT位置以最近分配，并删除子任务的放置
         self.update_dt_in_step()
