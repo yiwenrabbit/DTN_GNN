@@ -857,7 +857,7 @@ class Env:
     def dt_update_after_actions(self, edge_selection, decision_probs):
 
         update_size = 0
-        finish_reward = 0
+        #finish_reward = 0
         # 首先将所有DT位置以最近分配，并删除子任务的放置
         self.update_dt_in_step()
 
@@ -906,7 +906,7 @@ class Env:
                             accuracy = dt.return_accuracy()
                             sub_task.compute_size_accu(accuracy)  # 根据DT的更新量决定卸载任务数据量
 
-                            finish_reward += (accuracy - 0.5) * step_reward_factor  # 根据精度给予奖励
+                            #finish_reward += (accuracy - 0.5) * step_reward_factor  # 根据精度给予奖励
                             self.last_update_step[sub_task.subtask_id] = self.current_step
                             self.subtask_accuracy_dict[sub_task.subtask_id] = accuracy
                         else:
@@ -935,8 +935,8 @@ class Env:
                                 sub_task.compute_size_accu(accuracy)  # 根据DT的更新量决定卸载任务数据量
                                 sub_task.off_tag = 0
                                 #finish_reward += (accuracy - 0.8) * step_reward_factor  # 根据精度给予奖励
-                                reward_bonus = (accuracy - 0.5) * 4
-                                finish_reward += reward_bonus * step_reward_factor
+                                #reward_bonus = (accuracy - 0.5) * 4
+                                #finish_reward += reward_bonus * step_reward_factor
                                 self.last_update_step[sub_task.subtask_id] = self.current_step
                             else:
                                 # ❗️即使还没完成，也记录下当前更新时间
@@ -945,7 +945,7 @@ class Env:
 
 
         # 返回该时隙可以卸载的任务
-        return offload_subtasks, update_size, finish_reward
+        return offload_subtasks, update_size
 
 
         #############step函数######################
@@ -954,7 +954,7 @@ class Env:
         edge_selection, completion_rates = self.process_actions(DT_actions)
 
         # 需要做卸载决策的子任务集合
-        offload_subtasks, update_size, finish_reward = self.dt_update_after_actions(edge_selection, completion_rates)
+        offload_subtasks, update_size = self.dt_update_after_actions(edge_selection, completion_rates)
 
         if offload_subtasks:
             offloaded_size = self.allocate_resources(offload_subtasks)
@@ -963,7 +963,8 @@ class Env:
 
         # reward += update_size + finish_reward
 
-        reward += UPDATE_REWARD_SCALE * update_size + finish_reward
+        #reward += UPDATE_REWARD_SCALE * update_size + finish_reward
+        reward += UPDATE_REWARD_SCALE * update_size
 
         # 更新剩余时间
         self.task_delay_update()
@@ -1005,7 +1006,6 @@ class Env:
 
                 reward += final_reward * task_finish + min_acc_penalty
                 print(f"[Reward Debug] update_size={UPDATE_REWARD_SCALE * update_size:.2f}, "
-                      f"finish_reward={finish_reward:.2f}, "
                       f"final_reward={final_reward * task_finish:.2f}, "
                       f"min_acc_penalty={min_acc_penalty:.2f}, "
                       f"TOTAL={reward:.2f}")
@@ -1016,7 +1016,7 @@ class Env:
 
         print(f"[Reward Debug] step_reward={reward:.4f}")
         print(f"  update_size={update_size:.4f} (贡献={UPDATE_REWARD_SCALE * update_size:.4f})")
-        print(f"  finish_reward={finish_reward:.4f}")
+        #print(f"  finish_reward={finish_reward:.4f}")
         print(f"  overtime_penalty={locals().get('overtime_penalty', 0):.4f}")
         print(f"  final_reward={locals().get('final_reward', 0):.4f}")
         print(f"  min_acc_penalty={locals().get('min_acc_penalty', 0):.4f}")
