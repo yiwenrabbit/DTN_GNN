@@ -3,5 +3,9 @@
   <component name="Black">
     <option name="sdkName" value="IoTPytorch" />
   </component>
+<<<<<<< HEAD
   <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.9 (IoTPytorch) (3)" project-jdk-type="Python SDK" />
+=======
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.9 (IoTPytorch) (4)" project-jdk-type="Python SDK" />
+>>>>>>> ade2f79 (version at 0725)
 </project>

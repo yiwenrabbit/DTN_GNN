@@ -134,7 +134,11 @@ if __name__ == "__main__":
     )
 
     ### 游戏开始 ###
+<<<<<<< HEAD
     N_Games = 2000
+=======
+    N_Games = 50000
+>>>>>>> ade2f79 (version at 0725)
     MAX_STEPS = 200
     total_steps = 0
     best_score = -float('inf')
@@ -262,7 +266,11 @@ if __name__ == "__main__":
             "Episode_Reward": score,
             "Episode_Steps": episode_step,
             "Average_Reward": score / episode_step,
+<<<<<<< HEAD
             "Task_Accuracy": processed_accuracy,
+=======
+            #"Task_Accuracy": processed_accuracy,
+>>>>>>> ade2f79 (version at 0725)
             "Total_Steps": total_steps
         }, step=i + 1)
 
