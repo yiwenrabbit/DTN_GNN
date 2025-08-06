@@ -76,7 +76,7 @@ class PPOAgent:
 
             # === GCN 前向传播 ===
             with T.no_grad():
-<<<<<<< HEAD
+
                 gcn_output = self.gcn(gcn_x, edge_index)
 
                 # 确保 gcn_output 是二维张量
@@ -85,7 +85,7 @@ class PPOAgent:
                 else:
                     gcn_flatten = gcn_output.flatten().unsqueeze(0)
 
-=======
+
                 #gcn_output = self.gcn(gcn_x, edge_index)
 
                 # 确保 gcn_output 是二维张量
@@ -101,7 +101,7 @@ class PPOAgent:
                     gcn_flatten = T.ones((num_nodes, self.gcn.output_dim), device=gcn_x.device)
                 gcn_output = T.ones((1, num_nodes, self.gcn.output_dim), device=self.device)
                 gcn_flatten = gcn_output.view(1, -1)
->>>>>>> ade2f79 (version at 0725)
+
                 # === 拼接 network_states 和 GCN 输出 ===
                 state = T.cat((network_states, gcn_flatten), dim=1)
 
@@ -117,15 +117,15 @@ class PPOAgent:
                     logits = edge_logits[0, i]
                     if explore:
                         # 从分布中采样
-<<<<<<< HEAD
+
                         probs = F.softmax(logits, dim=0)
-=======
+
 
                         probs = F.softmax(logits, dim=0)
                         if T.isnan(probs).any():
                             print(f"[ NaN in softmax] logits: {logits}")
                             import pdb; pdb.set_trace()
->>>>>>> ade2f79 (version at 0725)
+
                         m = dist.Categorical(probs)
                         action = m.sample()
                         edge_actions.append(action.item())
@@ -285,11 +285,11 @@ class PPOAgent:
 
                 decision_dist = dist.Beta(2.0, 2.0)
                 new_decision_log_probs = decision_dist.log_prob(decision_actions.clamp(1e-8, 1 - 1e-8)).sum(dim=1)
-<<<<<<< HEAD
+
                 decision_entropy = decision_dist.entropy().sum(dim=1).mean()
-=======
+
                 decision_entropy = decision_dist.entropy().mean()
->>>>>>> ade2f79 (version at 0725)
+
 
                 new_log_probs = new_edge_log_probs + new_decision_log_probs
                 total_entropy = edge_entropy + decision_entropy

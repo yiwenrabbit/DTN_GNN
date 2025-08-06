@@ -36,10 +36,10 @@ class GCNModel(T.nn.Module):
 
         # 将模型移至GPU
         self.to(device)
-<<<<<<< HEAD
-=======
+
+
         self.output_dim = output_dim
->>>>>>> ade2f79 (version at 0725)
+
 
     def forward(self, x, edge_index):
         """
