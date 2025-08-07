@@ -226,18 +226,16 @@ class Task:
     #######获取所有任务的后续关联任务数据大小
     def get_descendant_subtasks(self, subtask):
         """
-        获取指定子任务在 DAG 中的所有子节点任务
+        获取指定子任务在原始 DAG 中的所有子节点任务的数据总量（不包含自身）
         """
+        # 使用原始 DAG
+        descendant_ids = nx.descendants(self.original_graph, subtask.subtask_id)
 
-        # 使用 NetworkX 的 descendants 方法获取所有后续节点
-        descendant_ids = nx.descendants(self.graph, subtask.subtask_id)
-
-        # 找到所有对应的 SubTask 对象
         descendant_subtasks_size = [
             st.data_size for st in self.subtasks if st.subtask_id in descendant_ids
         ]
-        #这里最后加的是任务当前剩余的任务量
         return sum(descendant_subtasks_size)
+
 
     def __repr__(self):
         return f"Task(task_id={self.task_id}, n_subtasks={self.n_subtasks}, is_completed={self.is_completed})"

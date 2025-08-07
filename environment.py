@@ -144,11 +144,15 @@ class Env:
                 sub_tasks.append(sub_task)
         return sub_tasks
 
+
+
     ###########保存与加载环境###################################
     def save_env(self, file_name='./tmp/saved_env.pkl'):
         """
         保存当前 Env 对象到文件
         """
+        os.makedirs(os.path.dirname(file_name), exist_ok=True)
+
         with open(file_name, 'wb') as f:
             pickle.dump(self, f)
         print(f"Environment saved to {file_name}.")
