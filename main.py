@@ -10,16 +10,16 @@ import torch as t
 import copy
 import os
 import matplotlib.pyplot as plt
-# import wandb
+import wandb
 import datetime
 
 current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 
-# wandb.login(key="122149ff6074b3fffbfa05229528d9cfa0a6835b")
-# wandb.init(
-#     project="DTN-PPO",
-#     name=f"{current_time}"
-# )
+wandb.login(key="122149ff6074b3fffbfa05229528d9cfa0a6835b")
+wandb.init(
+    project="DTN-PPO",
+    name=f"{current_time}"
+)
 
 def reset_reward(ave_acc, transitions):
     return 0
@@ -217,13 +217,13 @@ if __name__ == "__main__":
                 all_score.append(score + reward)
                 all_ave_rewards.append(ave_re)
                 task_status = env.print_all_accuracy()
-                # wandb.log({
-                #     f"Task_1_status": task_status[0],
-                #     f"Task_2_status": task_status[1],
-                #     f"Task_3_status": task_status[2],
-                #     f"Task_4_status": task_status[3],
-                #     f"Task_5_status": task_status[4],
-                # }, step=i + 1)
+                wandb.log({
+                    f"Task_1_status": task_status[0],
+                    f"Task_2_status": task_status[1],
+                    f"Task_3_status": task_status[2],
+                    f"Task_4_status": task_status[3],
+                    f"Task_5_status": task_status[4],
+                }, step=i + 1)
 
                 if env.tasks[0].task_delay == 0 and not env.tasks[0].is_completed:
                     print(f"Task failed in Episode {i + 1}!")
@@ -283,13 +283,13 @@ if __name__ == "__main__":
 
             # PPO需要在每个episode后清空buffer
             buffer.clear()
-        # wandb.log({
-        #     "Episode_Reward": score,
-        #     "Episode_Steps": episode_step,
-        #     "Average_Reward": score / episode_step,
-        #     # "Task_Accuracy": processed_accuracy,
-        #     "Total_Steps": total_steps
-        # }, step=i + 1)
+        wandb.log({
+            "Episode_Reward": score,
+            "Episode_Steps": episode_step,
+            "Average_Reward": score / episode_step,
+            # "Task_Accuracy": processed_accuracy,
+            "Total_Steps": total_steps
+        }, step=i + 1)
 
         # 保存模型
         if score > best_score:
@@ -357,4 +357,4 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.savefig(f'./data/ppo_training_curves_{current_time}.png')
     plt.close()
-    # wandb.finish()
+    wandb.finish()
