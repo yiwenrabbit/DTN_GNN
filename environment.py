@@ -950,6 +950,7 @@ class Env:
                                 #reward_bonus = (accuracy - 0.5) * 4
                                 #finish_reward += reward_bonus * step_reward_factor
                                 self.last_update_step[sub_task.subtask_id] = self.current_step
+                                self.subtask_accuracy_dict[sub_task.subtask_id] = accuracy
                             # else:
                             #     # 即使还没完成，也记录下当前更新时间
                             #     self.last_update_step[sub_task.subtask_id] = self.current_step
@@ -1190,8 +1191,6 @@ class Env:
             overtime_penalty = -time_over_due * penalty_weight * (remaining_ratio ** penalty_exponent)
 
             reward += overtime_penalty
-
-
         else:
             if self.tasks[0].task_delay >= 0 and self.tasks[0].is_completed == True:
                 # 最小精度和平均精度
@@ -1199,8 +1198,7 @@ class Env:
                 delay = self.tasks[0].task_delay / self.tasks[0].original_delay
                 final_reward = w1 * ave_accuracy + w2 * (1 - delay)
                 #reward += final_reward * task_finish
-                min_acc_penalty = (min_accuracy - 0.5) * 6
-
+                min_acc_penalty = (min_accuracy - 0.5) * 30
                 reward += final_reward * task_finish + min_acc_penalty
                 # print(f"[Reward Debug] update_size={UPDATE_REWARD_SCALE * update_size:.2f}, "
                 #       f"final_reward={final_reward * task_finish:.2f}, "
@@ -1285,57 +1283,6 @@ class Env:
         network_state = T.cat([flattened_features, T.tensor([task_delay], dtype=T.float)])
 
         return network_state
-
-    def reward_fn(self, transition, step_info, accuracy_step_dict, task, average_accuracy,delay_penalty_dict):
-        mask = step_info["mask"]  # 当前 step 涉及的子任务布尔 mask
-        rewards = []
-        weights = []
-
-        # 预计算所有子任务的依赖度
-        all_descendants = [task.get_descendant_subtasks(st) for st in task.subtasks]
-        max_dep = max(all_descendants) if all_descendants else 1.0
-
-
-        for idx, selected in enumerate(mask):
-            if not selected:
-                continue
-
-            subtask = task.subtasks[idx]
-            subtask_id = subtask.subtask_id
-            accuracy = self.subtask_accuracy_dict.get(subtask_id, 0.0)
-            update_step = self.last_update_step.get(subtask_id, -1)
-
-            if step_info["step"] != update_step:
-                continue
-            # 获取依赖度并归一化
-            dependency = task.get_descendant_subtasks(subtask)
-            norm_dep = norm_dep = 0.9 * (dependency / max_dep)
-            print(f"[Step {step_info['step']}] Subtask {subtask_id} → dependency: {dependency:.2f}, norm_dep: {norm_dep:.4f}, accuracy: {accuracy:.4f}")
-            # 惩罚策略：精度低时惩罚，依赖度越高惩罚越小
-            reward = 0.0
-            if "start_offload" in step_info["types"]:
-                if accuracy < average_accuracy:
-                    penalty = (average_accuracy - accuracy) * (1 - norm_dep)  # 惩罚依赖度小的
-                    reward = -penalty
-                else:
-                    bonus = (accuracy - average_accuracy) * (1 - norm_dep)
-                    reward += bonus
-            # ---------- 时延惩罚部分 ----------
-            subtask_delay_penalty = delay_penalty_dict.get(subtask_id, {}).get("steps", {}).get(step_info["step"], 0.0)
-            reward -= subtask_delay_penalty
-
-            print(f"[Step {step_info['step']}] Subtask {subtask_id} → dep: {dependency:.2f}, norm_dep: {norm_dep:.4f}, acc: {accuracy:.4f}, delay_penalty: {subtask_delay_penalty:.4f}, reward: {reward:.4f}")
-
-
-            rewards.append(reward)
-            weights.append(1.0)  # 可选：统一权重，也可以用 norm_dep
-
-        if not rewards:
-            return 0.0
-
-        step_reward = sum(rewards) / len(rewards)
-        print(f"[Step {step_info['step']}] Reward: {step_reward:.4f}")
-        return step_reward
 
     def update_rewards(self, filted_transitions, delay_penalty_dict, accuracy_step_dict, relevant_steps, average_accuracy):
         for index, item in enumerate(relevant_steps):
