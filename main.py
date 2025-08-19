@@ -11,7 +11,7 @@ import copy
 import os
 import matplotlib.pyplot as plt
 import wandb
-import datetime
+
 
 current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 
@@ -214,7 +214,8 @@ if __name__ == "__main__":
                 #processed_accuracy = process_accuracy(raw_accuracy)
                 episode_ave_accuracy = ave_accurarcy
                 all_task_accuracy.append(ave_accurarcy)
-                all_score.append(score + reward)
+                # all_score.append(score + reward)
+                all_score.append(episode_score_post)
                 all_ave_rewards.append(ave_re)
                 task_status = env.print_all_accuracy()
                 wandb.log({
@@ -258,6 +259,8 @@ if __name__ == "__main__":
         #更新奖励后的transitions
         updated_transitions = env.update_rewards(filted_transitions, delay_penalty_dict, accuracy_step_dict, relevant_steps, episode_ave_accuracy)
 
+        # 用改写后的奖励(transition[8])统计本局分数
+        episode_score_post = sum(tr[8] for tr in updated_transitions)
 
         for transition in updated_transitions:
             (x, edges, network_state, ready_mask, distance_mask, done_mask, off_mask,
@@ -284,20 +287,22 @@ if __name__ == "__main__":
             # PPO需要在每个episode后清空buffer
             buffer.clear()
         wandb.log({
-            "Episode_Reward": score,
+            "Episode_Reward": episode_score_post,     # 用改写后的分数
+            "Episode_Reward_raw": score,              # 可选：同时记录原始累计奖励，便于对比
             "Episode_Steps": episode_step,
-            "Average_Reward": score / episode_step,
-            # "Task_Accuracy": processed_accuracy,
+            "Average_Reward": episode_score_post / max(1, episode_step),
             "Total_Steps": total_steps
         }, step=i + 1)
 
-        # 保存模型
-        if score > best_score:
-            print(f"New best score: {score:.4f} (previous: {best_score:.4f})")
-            DT_place_agent.save_models()
-            best_score = score
 
-        # 定期输出训练进度
+# 保存模型
+        if episode_score_post > best_score:
+            print(f"New best score: {episode_score_post:.4f} (previous: {best_score:.4f})")
+            DT_place_agent.save_models()
+            best_score = episode_score_post
+
+
+# 定期输出训练进度
         if (i + 1) % 10 == 0:
             recent_scores = all_score[-10:] if len(all_score) >= 10 else all_score
             avg_recent_score = np.mean(recent_scores)
