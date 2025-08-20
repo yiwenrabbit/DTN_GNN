@@ -14,6 +14,7 @@ import datetime
 import wandb
 
 
+
 current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 
 wandb.login(key="122149ff6074b3fffbfa05229528d9cfa0a6835b")
@@ -141,8 +142,11 @@ if __name__ == "__main__":
     all_ave_rewards = []
     all_task_accuracy = []
     all_loss = []
-    all_score = []
-    # task_spread = env.tasks[0].calculate_task_spread()
+    # all_score = []
+    episode_rewards = []         # 每局分数：完成=改写后的总分；未完成/超时=原始累计score
+    episode_completed_flags = [] # 每局是否完成(1/0)，可选
+
+# task_spread = env.tasks[0].calculate_task_spread()
     task_status_map = {}
 
     # PPO特有的变量
@@ -216,16 +220,15 @@ if __name__ == "__main__":
                 episode_ave_accuracy = ave_accurarcy
                 all_task_accuracy.append(ave_accurarcy)
                 # all_score.append(score + reward)
-                all_score.append(episode_score_post)
                 all_ave_rewards.append(ave_re)
                 task_status = env.print_all_accuracy()
-                wandb.log({
-                    f"Task_1_status": task_status[0],
-                    f"Task_2_status": task_status[1],
-                    f"Task_3_status": task_status[2],
-                    f"Task_4_status": task_status[3],
-                    f"Task_5_status": task_status[4],
-                }, step=i + 1)
+                # wandb.log({
+                #     f"Task_1_status": task_status[0],
+                #     f"Task_2_status": task_status[1],
+                #     f"Task_3_status": task_status[2],
+                #     f"Task_4_status": task_status[3],
+                #     f"Task_5_status": task_status[4],
+                # }, step=i + 1)
 
                 if env.tasks[0].task_delay == 0 and not env.tasks[0].is_completed:
                     print(f"Task failed in Episode {i + 1}!")
@@ -241,84 +244,104 @@ if __name__ == "__main__":
                 total_steps += 1
                 print(f"Episode {i + 1}, Step {episode_step}, Reward: {reward:.4f}, Score: {score:.4f}")
 
-        # 一局游戏结束后-------------------------------------
-        relevant_steps, filted_transitions = env.find_unique_relevant_steps(episode_transitions)
+        # ========== 一局游戏结束后（统一按完成/未完成两种情况记分） ==========
+        task_completed = env.tasks[0].is_completed
 
-        #找出任务DT更新的steps
-        updated_steps_dict = env.return_update_steps(relevant_steps)
+        if task_completed:
+            # 1) 关键步 + 惩罚字典 + 改写奖励
+            relevant_steps, filted_transitions = env.find_unique_relevant_steps(episode_transitions)
+            updated_steps_dict = env.return_update_steps(relevant_steps)
+            delay_penalty_dict = env.return_delay_penalty(updated_steps_dict)
 
-        #对于更新dt的给出惩罚
-        delay_penalty_dict = env.return_delay_penalty(updated_steps_dict)
+            accuracy_step_dict = {
+                subtask_id: (env.subtask_accuracy_dict[subtask_id], env.last_update_step[subtask_id])
+                for subtask_id in env.subtask_accuracy_dict
+                if subtask_id in env.last_update_step
+            }
 
-        #取出最后更新精度的step
-        accuracy_step_dict = {
-            subtask_id: (env.subtask_accuracy_dict[subtask_id], env.last_update_step[subtask_id])
-            for subtask_id in env.subtask_accuracy_dict
-            if subtask_id in env.last_update_step
-        }
+            updated_transitions = env.update_rewards(
+                filted_transitions, delay_penalty_dict, accuracy_step_dict, relevant_steps, episode_ave_accuracy
+            )
 
-        #更新奖励后的transitions
-        updated_transitions = env.update_rewards(filted_transitions, delay_penalty_dict, accuracy_step_dict, relevant_steps, episode_ave_accuracy)
+            # 2) 本局最终得分（完成时）= 改写后的奖励总和（transition[8]）
+            episode_score_post = sum(tr[8] for tr in updated_transitions)
 
-        # 用改写后的奖励(transition[8])统计本局分数
-        episode_score_post = sum(tr[8] for tr in updated_transitions)
+            # 3) 存入 buffer（完成局用改写后的 transitions）
+            for transition in updated_transitions:
+                (x, edges, network_state, ready_mask, distance_mask, done_mask, off_mask,
+                 actions, reward, x_, edges_, new_network_state, new_ready_mask, new_distance_mask, new_done_mask,
+                 new_off_mask, done, _) = transition
 
-        for transition in updated_transitions:
-            (x, edges, network_state, ready_mask, distance_mask, done_mask, off_mask,
-             actions, reward, x_, edges_, new_network_state, new_ready_mask, new_distance_mask, new_done_mask,
-             new_off_mask, done, _) = transition
+                buffer.store_transition(
+                    x, edges, network_state, ready_mask, distance_mask, done_mask, off_mask,
+                    actions, reward, x_, edges_, new_network_state, new_ready_mask,
+                    new_distance_mask, new_done_mask, new_off_mask, done
+                )
 
-            buffer.store_transition(
-                x, edges, network_state, ready_mask, distance_mask, done_mask, off_mask,
-                actions, reward, x_, edges_, new_network_state, new_ready_mask,
-                new_distance_mask, new_done_mask, new_off_mask, done)
+            # 4) 学习
+            if buffer.ready():
+                try:
+                    print(f"Learning from episode {i + 1}...")
+                    loss = DT_place_agent.learn(buffer, i)
+                    all_loss.append(loss)
+                    print(f"Loss: {loss:.4f}")
+                except Exception as e:
+                    print(f"Error in learning: {e}")
+                buffer.clear()
 
-        #env.reward_after_finished(episode_transitions)
+            # 5) 更新“每局分数”和完成标记
+            episode_rewards.append(episode_score_post)
+            episode_completed_flags.append(1)
 
-        # Episode结束，进行PPO学习
-        if buffer.ready():
-            try:
-                print(f"Learning from episode {i + 1}...")
-                loss = DT_place_agent.learn(buffer, i)
-                all_loss.append(loss)
-                print(f"Loss: {loss:.4f}")
-            except Exception as e:
-                print(f"Error in learning: {e}")
+            # 6) wandb 记录（完成）
+            min_acc, avg_acc = env.return_dt_accuracy()
+            wandb.log({
+                "Episode_Reward": episode_score_post,          # 完成局：用改写后分数
+                "Episode_Reward_raw": float(score),            # 也记录原始累计（对比用）
+                "Episode_Completed": 1,
+                "Episode_Steps": episode_step,
+                "Episode_MinAcc": float(min_acc),
+                "Episode_AvgAcc": float(avg_acc),
+                "Total_Steps": total_steps
+            }, step=i + 1)
 
-            # PPO需要在每个episode后清空buffer
-            buffer.clear()
-        wandb.log({
-            "Episode_Reward": episode_score_post,     # 用改写后的分数
-            "Episode_Reward_raw": score,              # 可选：同时记录原始累计奖励，便于对比
-            "Episode_Steps": episode_step,
-            "Average_Reward": episode_score_post / max(1, episode_step),
-            "Total_Steps": total_steps
-        }, step=i + 1)
+            # 7) 保存最优模型（按“每局分数”评估）
+            if episode_score_post > best_score:
+                print(f"New best score: {episode_score_post:.4f} (previous: {best_score:.4f})")
+                DT_place_agent.save_models()
+                best_score = episode_score_post
+
+        else:
+            # 未完成/超时：这局也要记 —— 用“原始累计分数 score”作为该局分数
+            episode_rewards.append(score)
+            episode_completed_flags.append(0)
+
+            # wandb 记录（未完成）
+            wandb.log({
+                "Episode_Reward": float(score),                # 未完成局：用原始累计分数
+                "Episode_Completed": 0,
+                "Episode_Steps": episode_step,
+                "Total_Steps": total_steps
+            }, step=i + 1)
 
 
-# 保存模型
-        if episode_score_post > best_score:
-            print(f"New best score: {episode_score_post:.4f} (previous: {best_score:.4f})")
-            DT_place_agent.save_models()
-            best_score = episode_score_post
-
-
-# 定期输出训练进度
+    # 定期输出训练进度
         if (i + 1) % 10 == 0:
-            recent_scores = all_score[-10:] if len(all_score) >= 10 else all_score
-            avg_recent_score = np.mean(recent_scores)
+            recent = episode_rewards[-10:] if len(episode_rewards) >= 10 else episode_rewards
+            avg_recent = np.mean(recent) if recent else 0.0
             print(f"\n=== Training Progress ===")
             print(f"Episodes completed: {i + 1}/{N_Games}")
-            print(f"Average score (last 10 episodes): {avg_recent_score:.4f}")
+            print(f"Average score (last 10 episodes): {avg_recent:.4f}")
             print(f"Best score so far: {best_score:.4f}")
             print(f"Total steps: {total_steps}")
             print("========================\n")
+
 
     # 训练结束，保存结果
     print("\n=== Training Completed ===")
     print(f"Total episodes: {N_Games}")
     print(f"Best score achieved: {best_score:.4f}")
-    print(f"Average score: {np.mean(all_score):.4f}")
+    print(f"Average score: {np.mean(episode_rewards):.4f}")
     print(f"Average task accuracy: {np.mean(all_task_accuracy):.4f}")
 
     # 保存结果到文件
@@ -327,7 +350,7 @@ if __name__ == "__main__":
         file.write(f"# Time: {current_time}\n")
         file.write(f"# Episodes: {N_Games}\n")
         file.write(f"# Best Score: {best_score}\n")
-        file.write("\n".join(map(str, all_score)) + '\n')
+        file.write("\n".join(map(str, episode_rewards)) + '\n')
 
     with open(acc_dir, 'a') as file:
         file.write("# PPO Task Accuracy Results\n")
@@ -342,7 +365,7 @@ if __name__ == "__main__":
     plt.figure(figsize=(12, 4))
 
     plt.subplot(1, 3, 1)
-    plt.plot(all_score)
+    plt.plot(episode_rewards)
     plt.title('Episode Scores')
     plt.xlabel('Episode')
     plt.ylabel('Score')
