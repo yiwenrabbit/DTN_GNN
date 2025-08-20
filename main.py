@@ -222,13 +222,13 @@ if __name__ == "__main__":
                 # all_score.append(score + reward)
                 all_ave_rewards.append(ave_re)
                 task_status = env.print_all_accuracy()
-                # wandb.log({
-                #     f"Task_1_status": task_status[0],
-                #     f"Task_2_status": task_status[1],
-                #     f"Task_3_status": task_status[2],
-                #     f"Task_4_status": task_status[3],
-                #     f"Task_5_status": task_status[4],
-                # }, step=i + 1)
+                wandb.log({
+                    f"Task_1_status": task_status[0],
+                    f"Task_2_status": task_status[1],
+                    f"Task_3_status": task_status[2],
+                    f"Task_4_status": task_status[3],
+                    f"Task_5_status": task_status[4],
+                }, step=i + 1)
 
                 if env.tasks[0].task_delay == 0 and not env.tasks[0].is_completed:
                     print(f"Task failed in Episode {i + 1}!")
@@ -361,29 +361,4 @@ if __name__ == "__main__":
         file.write("# PPO Training Loss\n")
         file.write(f"# Time: {current_time}\n")
         file.write("\n".join(map(str, all_loss)) + '\n')
-
-    plt.figure(figsize=(12, 4))
-
-    plt.subplot(1, 3, 1)
-    plt.plot(episode_rewards)
-    plt.title('Episode Scores')
-    plt.xlabel('Episode')
-    plt.ylabel('Score')
-
-    plt.subplot(1, 3, 2)
-    plt.plot(all_task_accuracy)
-    plt.title('Task Accuracy')
-    plt.xlabel('Episode')
-    plt.ylabel('Accuracy')
-
-    plt.subplot(1, 3, 3)
-    if len(all_loss) > 0:
-        plt.plot(all_loss)
-        plt.title('Training Loss')
-        plt.xlabel('Learning Step')
-        plt.ylabel('Loss')
-
-    plt.tight_layout()
-    plt.savefig(f'./data/ppo_training_curves_{current_time}.png')
-    plt.close()
     wandb.finish()

@@ -6,7 +6,7 @@ from Network import ActorNetwork, CriticNetwork
 from GNN import GCNModel
 from torch.nn.utils import clip_grad_norm_
 import torch.distributions as dist
-
+import datetime
 
 class PPOAgent:
     def __init__(self, actor_dims, critic_dims, n_actions, agent_idx, chkpt_dir, n_subtasks, n_edges,
@@ -33,14 +33,14 @@ class PPOAgent:
         self.initial_alpha = alpha
         self.initial_beta = beta
         self.lr_decay = 0.995
-
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
         # 初始化网络
         self.gcn = GCNModel(gcn_input_dim, gcn_hidden_dim, gcn_output_dim).to(self.device)
         self.actor = ActorNetwork(alpha, actor_dims, fc1, fc2, fc3, n_subtasks, n_edges,
-                                  chkpt_dir=chkpt_dir, name=f'{self.agent_name}_actor').to(self.device)
+                                  chkpt_dir=chkpt_dir, name=f'{self.agent_name}_actor_{current_time}').to(self.device)
         # PPO只需要一个Critic网络
         self.critic = CriticNetwork(beta, critic_dims, fc1, fc2, fc3, 1,  # 注意这里改为输出单个值
-                                    chkpt_dir=chkpt_dir, name=f'{self.agent_name}_critic').to(self.device)
+                                    chkpt_dir=chkpt_dir, name=f'{self.agent_name}_critic_{current_time}').to(self.device)
 
         # 修改优化器，添加权重衰减
         self.gcn_optimizer = T.optim.AdamW(self.gcn.parameters(), lr=alpha, weight_decay=self.weight_decay)
