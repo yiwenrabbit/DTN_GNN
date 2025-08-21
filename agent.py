@@ -101,10 +101,9 @@ class PPOAgent:
                 batch_size = 1
             # gcn_output = T.ones((batch_size, num_nodes, self.gcn.output_dim), device=device)
             gcn_output = self.gcn(gcn_x, edge_index)
-            gcn_output = gcn_output.zero_()
-
+            gcn_output = T.randn_like(gcn_output)
             gcn_flatten = gcn_output.view(batch_size, -1)
-
+            state = T.cat([network_states, gcn_flatten], dim=1)
             # === 拼接完整状态向量 ===
             state =network_states
 
