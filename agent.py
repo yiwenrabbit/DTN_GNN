@@ -7,6 +7,8 @@ from GNN import GCNModel
 from torch.nn.utils import clip_grad_norm_
 import torch.distributions as dist
 import datetime
+import sys
+
 
 class PPOAgent:
     def __init__(self, actor_dims, critic_dims, n_actions, agent_idx, chkpt_dir, n_subtasks, n_edges,
@@ -40,7 +42,8 @@ class PPOAgent:
                                   chkpt_dir=chkpt_dir, name=f'{self.agent_name}_actor_{current_time}').to(self.device)
         # PPO只需要一个Critic网络
         self.critic = CriticNetwork(beta, critic_dims, fc1, fc2, fc3, 1,  # 注意这里改为输出单个值
-                                    chkpt_dir=chkpt_dir, name=f'{self.agent_name}_critic_{current_time}').to(self.device)
+                                    chkpt_dir=chkpt_dir, name=f'{self.agent_name}_critic_{current_time}').to(
+            self.device)
 
         # 修改优化器，添加权重衰减
         self.gcn_optimizer = T.optim.AdamW(self.gcn.parameters(), lr=alpha, weight_decay=self.weight_decay)
@@ -96,8 +99,11 @@ class PPOAgent:
             else:
                 num_nodes = gcn_x.shape[0]
                 batch_size = 1
-            #gcn_output = T.ones((batch_size, num_nodes, self.gcn.output_dim), device=device)
+            # gcn_output = T.ones((batch_size, num_nodes, self.gcn.output_dim), device=device)
             gcn_output = self.gcn(gcn_x, edge_index)
+            print(gcn_output.shape, "shape")
+            sys.exit(0)
+
             gcn_flatten = gcn_output.view(batch_size, -1)
 
             # === 拼接完整状态向量 ===
@@ -223,13 +229,12 @@ class PPOAgent:
                 edge_logits, decision_probs = self.actor.forward(states, ready_mask, distance_mask, done_mask, off_mask)
 
                 # 分解动作
-                edge_actions = actions[:, :self.n_subtasks * self.n_edges].view(-1, self.n_subtasks, self.n_edges).to(self.device)
-                #edge_actions = actions[:, :self.n_subtasks * self.n_edges].view(-1, self.n_subtasks, self.n_edges)
-                #decision_actions = actions[:, self.n_subtasks * self.n_edges:]
+                edge_actions = actions[:, :self.n_subtasks * self.n_edges].view(-1, self.n_subtasks, self.n_edges).to(
+                    self.device)
+                # edge_actions = actions[:, :self.n_subtasks * self.n_edges].view(-1, self.n_subtasks, self.n_edges)
+                # decision_actions = actions[:, self.n_subtasks * self.n_edges:]
                 # decision_actions = actions[:, self.n_subtasks * self.n_edges:].to(self.device)
                 decision_actions = actions[:, self.n_subtasks * self.n_edges:].clamp(1e-6, 1 - 1e-6).to(self.device)
-
-
 
                 # 计算edge动作的log概率
                 old_edge_log_probs = []
@@ -244,7 +249,7 @@ class PPOAgent:
                 old_edge_log_probs = T.stack(old_edge_log_probs)
 
                 # 计算决策动作的log概率
-                #decision_dist = dist.Beta(2.0, 2.0)
+                # decision_dist = dist.Beta(2.0, 2.0)
                 decision_dist = dist.Beta(T.tensor(2.0, device=decision_actions.device),
                                           T.tensor(2.0, device=decision_actions.device))
 
@@ -295,7 +300,7 @@ class PPOAgent:
                 new_edge_log_probs = T.stack(new_edge_log_probs)
                 edge_entropy = T.stack(edge_entropy).mean()
 
-                #decision_dist = dist.Beta(2.0, 2.0)
+                # decision_dist = dist.Beta(2.0, 2.0)
                 decision_dist = dist.Beta(T.tensor(2.0, device=decision_actions.device),
                                           T.tensor(2.0, device=decision_actions.device))
                 # new_decision_log_probs = decision_dist.log_prob(decision_actions.clamp(1e-8, 1 - 1e-8)).sum(dim=1)
