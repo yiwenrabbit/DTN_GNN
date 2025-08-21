@@ -101,12 +101,7 @@ class PPOAgent:
                 batch_size = 1
             # gcn_output = T.ones((batch_size, num_nodes, self.gcn.output_dim), device=device)
             gcn_output = self.gcn(gcn_x, edge_index)
-            print(gcn_output.shape, "shape")
             gcn_output = gcn_output.zero_()
-            print(gcn_output)
-            print(gcn_output.shape)
-            sys.exit(0)
-
             gcn_flatten = gcn_output.view(batch_size, -1)
 
             # === 拼接完整状态向量 ===
