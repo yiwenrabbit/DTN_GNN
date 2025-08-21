@@ -102,10 +102,11 @@ class PPOAgent:
             # gcn_output = T.ones((batch_size, num_nodes, self.gcn.output_dim), device=device)
             gcn_output = self.gcn(gcn_x, edge_index)
             gcn_output = gcn_output.zero_()
+
             gcn_flatten = gcn_output.view(batch_size, -1)
 
             # === 拼接完整状态向量 ===
-            state = T.cat((network_states, gcn_flatten), dim=1)
+            state = T.cat((network_states), dim=1)
 
             # === Actor前向传播 ===
             edge_logits, decision_probs = self.actor.forward(state, ready_mask, distance_mask, done_mask, off_mask)
