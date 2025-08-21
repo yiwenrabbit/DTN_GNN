@@ -13,8 +13,6 @@ import matplotlib.pyplot as plt
 import datetime
 import wandb
 
-
-
 current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 
 wandb.login(key="122149ff6074b3fffbfa05229528d9cfa0a6835b")
@@ -22,6 +20,7 @@ wandb.init(
     project="DTN-PPO",
     name=f"{current_time}"
 )
+
 
 def reset_reward(ave_acc, transitions):
     return 0
@@ -31,6 +30,7 @@ def obs_list_to_state_vector(observation):
     obs_clone = observation.clone()
     state = np.array(obs_clone)
     return state
+
 
 dic = {}
 
@@ -143,10 +143,10 @@ if __name__ == "__main__":
     all_task_accuracy = []
     all_loss = []
     # all_score = []
-    episode_rewards = []         # 每局分数：完成=改写后的总分；未完成/超时=原始累计score
-    episode_completed_flags = [] # 每局是否完成(1/0)，可选
+    episode_rewards = []  # 每局分数：完成=改写后的总分；未完成/超时=原始累计score
+    episode_completed_flags = []  # 每局是否完成(1/0)，可选
 
-# task_spread = env.tasks[0].calculate_task_spread()
+    # task_spread = env.tasks[0].calculate_task_spread()
     task_status_map = {}
 
     # PPO特有的变量
@@ -168,8 +168,8 @@ if __name__ == "__main__":
         episode_step = 1
         print(f"\n===== Starting Episode {i + 1} =====")
 
-        episode_ave_accuracy = 0    #记录当前episode的平均奖励
-        episode_transitions = []    #用于缓存一个episode的所有step
+        episode_ave_accuracy = 0  # 记录当前episode的平均奖励
+        episode_transitions = []  # 用于缓存一个episode的所有step
 
         while not done:
             # 获取节点和边
@@ -204,10 +204,6 @@ if __name__ == "__main__":
                 print(f"Error in environment step: {e}")
                 break
 
-
-
-
-
             for count in env.tasks:
                 print("delay", count.task_delay)
 
@@ -216,7 +212,7 @@ if __name__ == "__main__":
                 done = True
                 ave_re = (score + reward) / episode_step
                 min_accuracy, ave_accurarcy = env.return_dt_accuracy()
-                #processed_accuracy = process_accuracy(raw_accuracy)
+                # processed_accuracy = process_accuracy(raw_accuracy)
                 episode_ave_accuracy = ave_accurarcy
                 all_task_accuracy.append(ave_accurarcy)
                 # all_score.append(score + reward)
@@ -232,10 +228,11 @@ if __name__ == "__main__":
 
                 if env.tasks[0].task_delay == 0 and not env.tasks[0].is_completed:
                     print(f"Task failed in Episode {i + 1}!")
-                #env.apply_precision_gap_penalty(buffer)
+                # env.apply_precision_gap_penalty(buffer)
 
             episode_transitions.append([x, edges, network_state, ready_mask, distance_mask, done_mask, off_mask,
-                                        actions, reward, x_, edges_, new_network_state, new_ready_mask, new_distance_mask, new_done_mask,
+                                        actions, reward, x_, edges_, new_network_state, new_ready_mask,
+                                        new_distance_mask, new_done_mask,
                                         new_off_mask, done, update_ratio_all])
 
             if not done:
@@ -296,9 +293,10 @@ if __name__ == "__main__":
             # 6) wandb 记录（完成）
             min_acc, avg_acc = env.return_dt_accuracy()
             wandb.log({
-                "Episode_Reward": episode_score_post,          # 完成局：用改写后分数
-                "Episode_Reward_raw": float(score),            # 也记录原始累计（对比用）
+                "Episode_Reward": episode_score_post,  # 完成局：用改写后分数
+                "Episode_Reward_raw": float(score),  # 也记录原始累计（对比用）
                 "Episode_Completed": 1,
+                "Delay": env.tasks[0].task_delay,
                 "Episode_Steps": episode_step,
                 "Episode_MinAcc": float(min_acc),
                 "Episode_AvgAcc": float(avg_acc),
@@ -318,14 +316,14 @@ if __name__ == "__main__":
 
             # wandb 记录（未完成）
             wandb.log({
-                "Episode_Reward": float(score),                # 未完成局：用原始累计分数
+                "Episode_Reward": float(score),  # 未完成局：用原始累计分数
                 "Episode_Completed": 0,
+                "Delay": env.tasks[0].task_delay,
                 "Episode_Steps": episode_step,
                 "Total_Steps": total_steps
             }, step=i + 1)
 
-
-    # 定期输出训练进度
+        # 定期输出训练进度
         if (i + 1) % 10 == 0:
             recent = episode_rewards[-10:] if len(episode_rewards) >= 10 else episode_rewards
             avg_recent = np.mean(recent) if recent else 0.0
@@ -335,7 +333,6 @@ if __name__ == "__main__":
             print(f"Best score so far: {best_score:.4f}")
             print(f"Total steps: {total_steps}")
             print("========================\n")
-
 
     # 训练结束，保存结果
     print("\n=== Training Completed ===")
