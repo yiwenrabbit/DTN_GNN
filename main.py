@@ -299,6 +299,7 @@ if __name__ == "__main__":
                 "Episode_Reward": episode_score_post,          # 完成局：用改写后分数
                 "Episode_Reward_raw": float(score),            # 也记录原始累计（对比用）
                 "Episode_Completed": 1,
+                "Delay": env.tasks[0].task_delay,
                 "Episode_Steps": episode_step,
                 "Episode_MinAcc": float(min_acc),
                 "Episode_AvgAcc": float(avg_acc),
@@ -320,6 +321,7 @@ if __name__ == "__main__":
             wandb.log({
                 "Episode_Reward": float(score),                # 未完成局：用原始累计分数
                 "Episode_Completed": 0,
+                "Delay": env.tasks[0].task_delay,
                 "Episode_Steps": episode_step,
                 "Total_Steps": total_steps
             }, step=i + 1)
